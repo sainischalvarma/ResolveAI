@@ -19,9 +19,28 @@ export async function seedDefaultUsers() {
     let userExists = false;
 
     if (isConnected) {
-      adminExists = Boolean(await UserModel.findOne({ email: adminEmail }));
-      staffExists = Boolean(await UserModel.findOne({ email: staffEmail }));
-      userExists = Boolean(await UserModel.findOne({ email: userEmail }));
+      // Upsert demo users — always ensure correct roles even if they already exist
+      const adminUser = await UserModel.findOne({ email: adminEmail });
+      const staffUser2 = await UserModel.findOne({ email: staffEmail });
+      const regularUser = await UserModel.findOne({ email: userEmail });
+
+      adminExists = Boolean(adminUser);
+      staffExists = Boolean(staffUser2);
+      userExists = Boolean(regularUser);
+
+      // Fix roles if they exist but have wrong role
+      if (adminUser && adminUser.role !== "ADMIN") {
+        await UserModel.updateOne({ email: adminEmail }, { $set: { role: "ADMIN" } });
+        console.log(`Fixed admin role for ${adminEmail}`);
+      }
+      if (staffUser2 && staffUser2.role !== "STAFF") {
+        await UserModel.updateOne({ email: staffEmail }, { $set: { role: "STAFF" } });
+        console.log(`Fixed staff role for ${staffEmail}`);
+      }
+      if (regularUser && regularUser.role !== "USER") {
+        await UserModel.updateOne({ email: userEmail }, { $set: { role: "USER" } });
+        console.log(`Fixed user role for ${userEmail}`);
+      }
     }
 
     if (!adminExists) {

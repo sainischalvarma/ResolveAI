@@ -22,7 +22,9 @@ import {
   getAnalytics,
   getSystemSettings,
   updateSystemSetting,
-  listAuditLogs
+  listAuditLogs,
+  listStaffRequests,
+  reviewStaffRequest
 } from "../services/adminService.js";
 
 export const adminRouter = Router();
@@ -300,6 +302,28 @@ adminRouter.get("/audit-logs", async (req, res, next) => {
     const limit = req.query.limit ? Number(req.query.limit) : 25;
 
     const result = await listAuditLogs(req.authUser!, { action, resourceType, search, page, limit });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  10. STAFF LOGIN REQUESTS REVIEW (ACCEPT / REJECT)                 */
+/* ------------------------------------------------------------------ */
+adminRouter.get("/staff-requests", async (req, res, next) => {
+  try {
+    const result = await listStaffRequests(req.authUser!);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminRouter.put("/staff-requests/:id/review", async (req, res, next) => {
+  try {
+    const { decision, notes } = req.body;
+    const result = await reviewStaffRequest(req.authUser!, req.params.id, decision, notes);
     res.json(result);
   } catch (error) {
     next(error);

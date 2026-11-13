@@ -15,7 +15,8 @@ import {
   getTechnicianProfile,
   updateTechnicianProfile,
   getAssignmentRecommendation,
-  intelligentAssignTicket
+  intelligentAssignTicket,
+  contributeKnowledge
 } from "../services/staffService.js";
 
 export const staffRouter = Router();
@@ -259,3 +260,31 @@ staffRouter.put("/profile", async (req, res, next) => {
     next(error);
   }
 });
+
+/* ------------------------------------------------------------------ */
+/*  7. Knowledge Contribution ("Save as Knowledge")                   */
+/* ------------------------------------------------------------------ */
+staffRouter.post("/knowledge", async (req, res, next) => {
+  try {
+    const { ticketId, title, problem, rootCause, troubleshootingSteps, solution, category, tags, department } = req.body;
+    if (!problem || !solution) {
+      res.status(400).json({ error: "Problem description and final solution are required" });
+      return;
+    }
+    const result = await contributeKnowledge(req.authUser!, {
+      ticketId,
+      title: title || `Solved: ${problem.slice(0, 60)}`,
+      problem,
+      rootCause,
+      troubleshootingSteps: troubleshootingSteps || [],
+      solution,
+      category: category || "general",
+      tags: tags || [],
+      department
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+

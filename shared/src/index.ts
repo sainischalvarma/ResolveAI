@@ -19,10 +19,17 @@ export interface AuthenticatedUser {
   name: string;
   email: string;
   role: UserRole;
+  googleId?: string;
+  profileImage?: string;
+  status?: string;
+  staffRequestedAt?: string;
+  staffReviewedAt?: string;
   department?: string;
   phone?: string;
   active: boolean;
+  lastLogin?: string;
 }
+
 
 export interface AuthSession {
   user: AuthenticatedUser;
@@ -73,6 +80,7 @@ export interface ChatConversationRecord {
   userId: string;
   title: string;
   messages: ChatMessageRecord[];
+  state?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }

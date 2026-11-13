@@ -6,6 +6,7 @@ import { initQdrant } from "./config/qdrant.js";
 import { createNotificationGateway } from "./services/notifications/notificationGateway.js";
 
 import { seedDefaultUsers } from "./services/seedUsers.js";
+import { seedMongoKnowledge } from "./services/rag/RagService.js";
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ createNotificationGateway(server);
 
 await connectDatabase(process.env.MONGODB_URI);
 await seedDefaultUsers();
+await seedMongoKnowledge();
 await initQdrant();
 
 server.listen(port, () => {

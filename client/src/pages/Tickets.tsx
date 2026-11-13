@@ -251,15 +251,15 @@ export function Tickets() {
               className={cn(
                 "flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all",
                 activeTab === tab.id
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white border border-slate-200/90 text-slate-600 hover:bg-slate-50"
+                  ? "bg-slate-900 dark:bg-teal-600 text-white shadow-xs font-bold"
+                  : "bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
               )}
             >
               <span>{tab.label}</span>
               <span
                 className={cn(
                   "rounded-full px-1.5 py-0.2 text-[10px] font-bold",
-                  activeTab === tab.id ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                  activeTab === tab.id ? "bg-white/20 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                 )}
               >
                 {tab.count}
@@ -277,7 +277,7 @@ export function Tickets() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search your requests..."
-              className="w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 py-2 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 transition-all"
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 pl-9 pr-3 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/10 transition-all"
             />
           </div>
 
@@ -285,20 +285,20 @@ export function Tickets() {
             type="button"
             onClick={fetchTickets}
             disabled={isLoading}
-            className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors shadow-2xs"
             title="Refresh requests"
           >
             <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           </button>
 
           {/* Card / Table Toggle */}
-          <div className="flex items-center rounded-xl border border-slate-200 bg-white p-0.5 shadow-2xs">
+          <div className="flex items-center rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-0.5 shadow-2xs">
             <button
               type="button"
               onClick={() => setViewMode("cards")}
               className={cn(
                 "p-1.5 rounded-lg text-xs transition-colors",
-                viewMode === "cards" ? "bg-slate-100 text-slate-900 font-bold" : "text-slate-400 hover:text-slate-700"
+                viewMode === "cards" ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold" : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               )}
               title="Card view"
             >
@@ -309,7 +309,7 @@ export function Tickets() {
               onClick={() => setViewMode("table")}
               className={cn(
                 "p-1.5 rounded-lg text-xs transition-colors",
-                viewMode === "table" ? "bg-slate-100 text-slate-900 font-bold" : "text-slate-400 hover:text-slate-700"
+                viewMode === "table" ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold" : "text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
               )}
               title="Table view"
             >

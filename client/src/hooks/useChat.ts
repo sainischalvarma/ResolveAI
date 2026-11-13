@@ -9,6 +9,14 @@ import {
   sendChatMessage
 } from "../services/api";
 
+function friendlyError(err: any, fallback: string): string {
+  if (err.response?.status === 401) return "Session expired. Please log in again.";
+  if (err.response?.status === 403) return "You don't have permission for this action.";
+  if (err.response?.status >= 500) return "Server error. Please try again later.";
+  if (err.code === "ERR_NETWORK") return "Cannot reach the server. Is the backend running?";
+  return err.response?.data?.message || err.response?.data?.error || fallback;
+}
+
 export function useChat() {
   const { user } = useAuth();
   const currentUserId = user?.id || "development-user";
@@ -55,11 +63,7 @@ export function useChat() {
       }
     } catch (err: any) {
       console.error("Failed to load conversations:", err);
-      setError(
-        err.response?.data?.message ||
-          err.message ||
-          "Unable to load conversations. Check that the backend is running."
-      );
+      setError(friendlyError(err, "Unable to load conversations. Check that the backend is running."));
     } finally {
       setIsLoading(false);
     }
@@ -79,7 +83,7 @@ export function useChat() {
       await refreshConversations();
     } catch (err: any) {
       console.error("Failed to start conversation:", err);
-      setError(err.response?.data?.message || "Unable to start a new conversation.");
+      setError(friendlyError(err, "Unable to start a new conversation."));
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +95,7 @@ export function useChat() {
       await loadConversation(conversationId);
     } catch (err: any) {
       console.error("Failed to select conversation:", err);
-      setError(err.response?.data?.message || "Unable to load that conversation.");
+      setError(friendlyError(err, "Unable to load that conversation."));
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +113,7 @@ export function useChat() {
       await refreshConversations();
     } catch (err: any) {
       console.error("Failed to send message:", err);
-      setError(err.response?.data?.message || "Message failed. Please retry.");
+      setError(friendlyError(err, "Message failed. Please retry."));
     } finally {
       setIsSending(false);
     }
@@ -130,7 +134,7 @@ export function useChat() {
       }
     } catch (err: any) {
       console.error("Failed to delete conversation:", err);
-      setError(err.response?.data?.message || "Unable to delete conversation.");
+      setError(friendlyError(err, "Unable to delete conversation."));
     }
   }
 

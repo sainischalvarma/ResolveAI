@@ -40,6 +40,26 @@ pnpm dev
 
 Create `.env` from `.env.example` and set real secrets locally. Do not commit `.env`.
 
+## Deployment (Docker)
+
+```bash
+# Copy and fill in secrets
+cp .env.example server/.env
+
+# Build and start both containers
+docker compose up --build -d
+```
+
+- Client: http://localhost (Nginx serves the React SPA and proxies `/api` to the server)
+- Server: http://localhost:4000
+- Health check: http://localhost:4000/health
+
+To pass a custom API URL at build time (e.g. for a hosted domain):
+
+```bash
+docker compose build --build-arg VITE_API_URL=https://api.yourdomain.com/api
+```
+
 ## Research Positioning
 
 Existing AI service-desk systems already provide conversational support, knowledge retrieval, ticket automation, routing, and escalation. ResolveAI focuses specifically on evaluating an outcome-driven adaptive troubleshooting mechanism that uses action-level historical outcomes and failure memory to dynamically select troubleshooting paths and decide when to escalate.

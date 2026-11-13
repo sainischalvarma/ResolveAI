@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import type { ChatConversationRecord, ChatMessageRecord, ChatMessageRole } from "@resolveai/shared";
-import { ConversationModel, MessageModel, type ConversationDocument, type MessageDocument } from "../models/index.js";
+import {
+  ActionOutcomeModel,
+  ConversationModel,
+  MessageModel,
+  TicketModel,
+  TroubleshootingSessionModel,
+  type ConversationDocument,
+  type MessageDocument
+} from "../models/index.js";
 import { AIService } from "./ai/AIService.js";
 import type { AiProvider } from "./ai/AiProvider.js";
 
@@ -13,6 +21,7 @@ interface DevelopmentConversation {
   userId: string;
   title: string;
   messages: ChatMessageRecord[];
+  state?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +46,7 @@ export async function createConversation(input: CreateConversationInput = {}) {
       userId,
       title,
       messages: [],
+      state: {},
       createdAt: now,
       updatedAt: now
     };
@@ -68,8 +78,14 @@ export async function appendMessage(conversationId: string, content: string, use
     conversation.messages.push(userMessage);
 
     const ai = createAiService();
-    const reply = await ai.generateChatReply(conversation.messages);
+    const reply = await ai.generateChatReply(conversation.messages, conversation.state);
     conversation.messages.push(createDevelopmentMessage(conversation.id, "assistant", reply.content));
+    
+    if (reply.state?.escalate && !reply.state.ticketId) {
+      reply.state.ticketId = randomUUID();
+    }
+    
+    conversation.state = reply.state;
     conversation.updatedAt = new Date().toISOString();
 
     return conversation;
@@ -84,9 +100,81 @@ export async function appendMessage(conversationId: string, content: string, use
   await MessageModel.create({ conversationId: conversation._id, userId, role: "user", content: normalizedContent });
   const messages = await MessageModel.find({ conversationId: conversation._id, userId }).sort({ createdAt: 1 });
   const ai = createAiService();
-  const reply = await ai.generateChatReply(messages.map(toMessageRecord));
+  const reply = await ai.generateChatReply(messages.map(toMessageRecord), conversation.state);
   await MessageModel.create({ conversationId: conversation._id, userId, role: "assistant", content: reply.content });
-  await ConversationModel.updateOne({ _id: conversation._id }, { title: conversation.title || createTitle(content) });
+
+  // Record Outcome Memory in MongoDB
+  try {
+    if (reply.state?.solved) {
+      await ActionOutcomeModel.create({
+        problemCategory: reply.state.issue_category || "general",
+        problemType: reply.state.issue_type || "Troubleshooting",
+        actionId: reply.state.source_id || "resolved_step",
+        actionName: reply.state.source_id || "Approved Troubleshooting Procedure",
+        result: "SUCCESS",
+        context: { conversationId, lastMessage: normalizedContent }
+      });
+    } else if (reply.state?.failed_steps && reply.state.failed_steps.length > 0) {
+      const lastFailed = reply.state.failed_steps[reply.state.failed_steps.length - 1];
+      if (lastFailed) {
+        await ActionOutcomeModel.create({
+          problemCategory: reply.state.issue_category || "general",
+          problemType: reply.state.issue_type || "Troubleshooting",
+          actionId: lastFailed,
+          actionName: lastFailed,
+          result: "FAILURE",
+          context: { conversationId, lastMessage: normalizedContent }
+        });
+      }
+    }
+  } catch (outcomeErr) {
+    console.warn("Could not save action outcome:", outcomeErr);
+  }
+  
+  if (reply.state?.escalate && !reply.state.ticketId) {
+    const priority = reply.state.impact_scope === "organization_wide" ? "P1" : (reply.state.impact_scope === "multiple_users" ? "P2" : "P3");
+    const severity = reply.state.impact_scope === "organization_wide" ? "CRITICAL" : (reply.state.impact_scope === "multiple_users" ? "HIGH" : "MEDIUM");
+    const transcript = messages.map((m) => `${m.role === "user" ? "User" : "AI"}: ${m.content}`).join("\n\n");
+    
+    const ticket = await TicketModel.create({
+      title: conversation.title || "Support Escalation",
+      description: `Issue: ${reply.state.issue_category} - ${reply.state.issue_type || "Technical Issue"}\nDevice: ${reply.state.device || "Workstation"}\nOS: ${reply.state.operating_system || "Windows"}\nError: ${reply.state.error_message || "None"}\n\nEscalation Reason: ${reply.state.reason_for_escalation || "User escalated from chat"}\n\nAttempted Actions: ${(reply.state.completed_steps || []).join(", ") || "None"}\nFailed Actions: ${(reply.state.failed_steps || []).join(", ") || "None"}\nRAG Knowledge Source: ${reply.state.source_id || "None"}\n\nFull Chat Transcript:\n${transcript}`,
+      category: reply.state.issue_category || "general",
+      severity,
+      priority,
+      status: "OPEN",
+      userId: new mongoose.Types.ObjectId(userId),
+      attemptedActions: reply.state.completed_steps || [],
+      failedActions: reply.state.failed_steps || [],
+      ragSources: reply.state.source_id ? [reply.state.source_id] : [],
+      escalationReason: reply.state.reason_for_escalation || "User escalated from chat"
+    });
+    
+    reply.state.ticketId = ticket._id.toString();
+  }
+
+  // Update or record TroubleshootingSession
+  try {
+    const sessionStatus = reply.state?.solved ? "RESOLVED" : reply.state?.escalate ? "ESCALATED" : "ACTIVE";
+    await TroubleshootingSessionModel.findOneAndUpdate(
+      { conversationId: conversation._id.toString() },
+      {
+        userId: new mongoose.Types.ObjectId(userId),
+        conversationId: conversation._id.toString(),
+        problemDescription: conversation.title || normalizedContent,
+        category: (reply.state?.issue_category as any) || "other",
+        status: sessionStatus,
+        totalStepsAttempted: reply.state?.current_step || 1,
+        ticketId: reply.state?.ticketId ? new mongoose.Types.ObjectId(reply.state.ticketId) : undefined,
+        escalationReason: reply.state?.reason_for_escalation
+      },
+      { upsert: true, new: true }
+    );
+  } catch (sessErr) {
+    console.warn("Could not save troubleshooting session:", sessErr);
+  }
+
+  await ConversationModel.updateOne({ _id: conversation._id }, { title: conversation.title || createTitle(content), state: reply.state });
 
   return getConversation(conversationId, userId);
 }
@@ -203,6 +291,7 @@ function toConversationRecord(
     userId: conversation.userId,
     title: conversation.title,
     messages: messages.map((message) => ("_id" in message ? toMessageRecord(message) : message)),
+    state: conversation.state,
     createdAt: conversation.createdAt.toISOString(),
     updatedAt: conversation.updatedAt.toISOString()
   };

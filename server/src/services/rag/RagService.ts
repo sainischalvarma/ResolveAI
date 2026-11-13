@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import mongoose from "mongoose";
 import { KnowledgeChunkModel } from "../../models/KnowledgeChunk.js";
+import { resolveEmbeddingProvider } from "./EmbeddingProvider.js";
 
 const embeddingDimensions = 384;
 const defaultVectorIndexName = "knowledge_embedding_index";
@@ -10,6 +11,7 @@ export interface RagChunk {
   chunkId: string;
   documentId: string;
   title: string;
+  category?: string;
   content: string;
   relevance: number;
   metadata: Record<string, unknown>;
@@ -54,21 +56,9 @@ export function createRagService(): RagService {
   return isDatabaseConnected() ? new MongoVectorRagService() : new InMemoryVectorRagService();
 }
 
-export function embedText(text: string) {
-  const vector = Array.from({ length: embeddingDimensions }, () => 0);
-  const tokens = tokenize(text);
-
-  for (const token of tokens) {
-    const digest = createHash("sha256").update(token).digest();
-
-    for (let index = 0; index < 4; index += 1) {
-      const position = digest.readUInt16BE(index * 2) % embeddingDimensions;
-      const sign = digest[index + 8] % 2 === 0 ? 1 : -1;
-      vector[position] += sign * (1 + Math.log(token.length));
-    }
-  }
-
-  return normalizeVector(vector);
+export async function embedText(text: string) {
+  const provider = resolveEmbeddingProvider();
+  return provider.embed(text);
 }
 
 class InMemoryVectorRagService implements RagService {
@@ -79,20 +69,26 @@ class InMemoryVectorRagService implements RagService {
   async indexDocument(input: IndexKnowledgeDocumentInput): Promise<KnowledgeDocumentSummary> {
     const documentId = randomUUID();
     const category = normalizeCategory(input.category);
-    const chunks = chunkText(input.content).map((content, index) => ({
-      chunkId: `${documentId}:${index}`,
-      documentId,
-      title: input.title,
-      category,
-      content,
-      embedding: embedText(`${input.title}\n${content}`),
-      metadata: { ...input.metadata, sourceType: "development", chunkIndex: index },
-      updatedAt: new Date().toISOString()
-    }));
+    const chunksToInsert = [];
+    const chunksRaw = chunkText(input.content);
+    for (let index = 0; index < chunksRaw.length; index++) {
+      const content = chunksRaw[index];
+      const embedding = await embedText(`${input.title}\n${content}`);
+      chunksToInsert.push({
+        chunkId: `${documentId}:${index}`,
+        documentId,
+        title: input.title,
+        category,
+        content,
+        embedding,
+        metadata: { ...input.metadata, sourceType: "development", chunkIndex: index },
+        updatedAt: new Date().toISOString()
+      });
+    }
 
-    developmentChunks.push(...chunks);
+    developmentChunks.push(...chunksToInsert);
 
-    return summarizeChunks(chunks, "memory")[0];
+    return summarizeChunks(chunksToInsert, "memory")[0];
   }
 
   async listDocuments(): Promise<KnowledgeDocumentSummary[]> {
@@ -100,7 +96,7 @@ class InMemoryVectorRagService implements RagService {
   }
 
   async retrieve(query: string, options: RetrieveKnowledgeOptions = {}): Promise<RagChunk[]> {
-    const queryEmbedding = embedText(query);
+    const queryEmbedding = await embedText(query);
     const category = options.category ? normalizeCategory(options.category) : undefined;
     const limit = clampLimit(options.limit);
 
@@ -110,6 +106,7 @@ class InMemoryVectorRagService implements RagService {
         chunkId: chunk.chunkId,
         documentId: chunk.documentId,
         title: chunk.title,
+        category: chunk.category,
         content: chunk.content,
         relevance: cosineSimilarity(queryEmbedding, chunk.embedding),
         metadata: chunk.metadata
@@ -123,23 +120,29 @@ class MongoVectorRagService implements RagService {
   async indexDocument(input: IndexKnowledgeDocumentInput): Promise<KnowledgeDocumentSummary> {
     const documentId = new mongoose.Types.ObjectId().toString();
     const category = normalizeCategory(input.category);
-    const chunks = chunkText(input.content).map((content, index) => ({
-      documentId,
-      chunkId: `${documentId}:${index}`,
-      title: input.title,
-      category,
-      content,
-      embedding: embedText(`${input.title}\n${content}`),
-      metadata: { ...input.metadata, chunkIndex: index }
-    }));
+    const chunksToInsert = [];
+    const chunksRaw = chunkText(input.content);
+    for (let index = 0; index < chunksRaw.length; index++) {
+      const content = chunksRaw[index];
+      const embedding = await embedText(`${input.title}\n${content}`);
+      chunksToInsert.push({
+        documentId,
+        chunkId: `${documentId}:${index}`,
+        title: input.title,
+        category,
+        content,
+        embedding,
+        metadata: { ...input.metadata, chunkIndex: index }
+      });
+    }
 
-    await KnowledgeChunkModel.insertMany(chunks);
+    await KnowledgeChunkModel.insertMany(chunksToInsert);
 
     return {
       documentId,
       title: input.title,
       category,
-      chunkCount: chunks.length,
+      chunkCount: chunksToInsert.length,
       storage: "mongodb-vector",
       updatedAt: new Date().toISOString()
     };
@@ -178,78 +181,130 @@ class MongoVectorRagService implements RagService {
   async retrieve(query: string, options: RetrieveKnowledgeOptions = {}): Promise<RagChunk[]> {
     const category = options.category ? normalizeCategory(options.category) : undefined;
     const limit = clampLimit(options.limit);
-    const filter = category ? { category } : undefined;
-    const pipeline = [
-      {
-        $vectorSearch: {
-          index: process.env.MONGODB_VECTOR_INDEX ?? defaultVectorIndexName,
-          path: "embedding",
-          queryVector: embedText(query),
-          numCandidates: Math.max(limit * 20, 100),
-          limit,
-          ...(filter ? { filter } : {})
-        }
-      },
-      {
-        $project: {
-          _id: 0,
-          chunkId: 1,
-          documentId: 1,
-          title: 1,
-          content: 1,
-          metadata: 1,
-          relevance: { $meta: "vectorSearchScore" }
-        }
-      }
-    ];
+    const categoryFilter = category ? { category } : {};
+    const approvalFilter = { "metadata.approvalStatus": { $ne: "REJECTED" } };
 
-    return KnowledgeChunkModel.aggregate<RagChunk>(pipeline);
+    // 1. Try MongoDB Atlas Vector Search native aggregation pipeline
+    try {
+      const queryVector = await embedText(query);
+      const pipeline: any[] = [
+        {
+          $vectorSearch: {
+            index: process.env.MONGODB_VECTOR_INDEX ?? defaultVectorIndexName,
+            path: "embedding",
+            queryVector,
+            numCandidates: Math.max(limit * 20, 100),
+            limit,
+            ...(category ? { filter: { category } } : {})
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            chunkId: 1,
+            documentId: 1,
+            title: 1,
+            category: 1,
+            content: 1,
+            metadata: 1,
+            relevance: { $meta: "vectorSearchScore" }
+          }
+        }
+      ];
+
+      const results = await KnowledgeChunkModel.aggregate<RagChunk>(pipeline);
+      if (results && results.length > 0) {
+        return results.filter((r) => r.metadata?.approvalStatus !== "REJECTED");
+      }
+    } catch {
+      // $vectorSearch index might not be configured on MongoDB Atlas yet, fall through to vector embedding search
+    }
+
+    // 2. Semantic Vector Embedding Search over MongoDB Atlas Chunks
+    const queryEmbedding = await embedText(query);
+    const candidateChunks = await KnowledgeChunkModel.find({
+      ...categoryFilter,
+      ...approvalFilter
+    })
+      .limit(100)
+      .lean();
+
+    if (candidateChunks.length > 0) {
+      return candidateChunks
+        .map((chunk) => ({
+          chunkId: chunk.chunkId,
+          documentId: chunk.documentId,
+          title: chunk.title,
+          category: chunk.category,
+          content: chunk.content,
+          relevance: cosineSimilarity(queryEmbedding, chunk.embedding),
+          metadata: (chunk.metadata as Record<string, unknown>) ?? {}
+        }))
+        .sort((left, right) => right.relevance - left.relevance)
+        .slice(0, limit);
+    }
+
+    return [];
   }
 }
 
-function seedDevelopmentKnowledge() {
+export async function seedMongoKnowledge() {
+  if (!isDatabaseConnected()) return;
+  try {
+    const count = await KnowledgeChunkModel.countDocuments();
+    if (count === 0) {
+      const rag = new MongoVectorRagService();
+      for (const doc of defaultKnowledgeDocuments) {
+        await rag.indexDocument({
+          title: doc.title,
+          content: doc.content,
+          category: doc.category,
+          metadata: { actionId: "actionId" in doc ? (doc as any).actionId : undefined, id: doc.id }
+        });
+      }
+      console.log(`Seeded ${defaultKnowledgeDocuments.length} IT knowledge base documents into MongoDB.`);
+    }
+  } catch (err) {
+    console.warn("Could not seed knowledge to MongoDB:", (err as Error).message);
+  }
+}
+
+async function seedDevelopmentKnowledge() {
   if (developmentChunks.length > 0) {
     return;
   }
 
   for (const document of defaultKnowledgeDocuments) {
     const documentId = document.id;
-    const chunks = chunkText(document.content).map((content, index) => ({
-      chunkId: `${documentId}:${index}`,
-      documentId,
-      title: document.title,
-      category: document.category,
-      content,
-      embedding: embedText(`${document.title}\n${content}`),
-      metadata: { sourceType: "seed", actionId: document.actionId, chunkIndex: index },
-      updatedAt: new Date(0).toISOString()
-    }));
-
-    developmentChunks.push(...chunks);
+    const chunksRaw = chunkText(document.content);
+    for (let index = 0; index < chunksRaw.length; index++) {
+      const content = chunksRaw[index];
+      const embedding = await embedText(`${document.title}\n${content}`);
+      developmentChunks.push({
+        chunkId: `${documentId}:${index}`,
+        documentId,
+        title: document.title,
+        category: document.category,
+        content,
+        embedding,
+        metadata: { sourceType: "seed", actionId: document.actionId, chunkIndex: index },
+        updatedAt: new Date(0).toISOString()
+      });
+    }
   }
 }
 
 function chunkText(text: string) {
-  const paragraphs = text
-    .replace(/\r\n/g, "\n")
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-
+  // Split by headings (e.g. PROBLEM:, TROUBLESHOOTING STEPS:, EXPECTED RESULT:, ESCALATION CONDITIONS:)
+  // or double newlines, but keeping ordered step lists together.
+  const sections = text.split(/(?=^[A-Z\s]+:$)/m).filter(Boolean);
   const chunks: string[] = [];
-  let current = "";
 
-  for (const paragraph of paragraphs.length > 0 ? paragraphs : [text.trim()]) {
-    if (`${current}\n\n${paragraph}`.trim().length > 900 && current) {
-      chunks.push(current);
-      current = paragraph;
-    } else {
-      current = `${current}\n\n${paragraph}`.trim();
+  for (const section of sections) {
+    const trimmed = section.trim();
+    if (trimmed.length > 0) {
+      chunks.push(trimmed);
     }
-  }
-
-  if (current) {
-    chunks.push(current);
   }
 
   return chunks.length > 0 ? chunks : [text.trim()];
@@ -319,7 +374,123 @@ function isDatabaseConnected() {
   return mongoose.connection.readyState === 1;
 }
 
-const defaultKnowledgeDocuments = [
+export const defaultKnowledgeDocuments = [
+  {
+    id: "kb-wifi-not-connecting",
+    title: "Wi-Fi not connecting",
+    category: "network",
+    actionId: "wifi_not_connecting",
+    content: [
+      "PROBLEM: Wi-Fi is not working or the device cannot connect to a wireless network (e.g. 'Can't connect to this network').",
+      "TROUBLESHOOTING STEPS:",
+      "1. Confirm Wi-Fi is turned on (check the Wi-Fi toggle / airplane mode is off). Expected: the Wi-Fi list shows available networks.",
+      "2. Forget the network and reconnect, re-entering the password. Expected: the device reconnects successfully.",
+      "3. Restart the Wi-Fi adapter or toggle airplane mode on then off. Expected: the adapter re-scans and connects.",
+      "4. Restart the device. Expected: a clean network stack reconnects automatically.",
+      "5. Move closer to the router / access point to rule out signal strength. Expected: stronger signal and a stable connection.",
+      "EXPECTED RESULT: The device connects to the Wi-Fi network and can browse the internet.",
+      "ESCALATION CONDITIONS: All steps attempted and still no connection, OR multiple users/devices cannot connect, OR the access point appears down."
+    ].join("\n")
+  },
+  {
+    id: "kb-internet-connection",
+    title: "Connected to Wi-Fi but no internet",
+    category: "network",
+    actionId: "wifi_no_internet",
+    content: [
+      "PROBLEM: The device is connected to the network but web pages do not load (no internet / limited connectivity).",
+      "TROUBLESHOOTING STEPS:",
+      "1. Check whether other devices on the same network have internet. Expected: identifies if the issue is local or network-wide.",
+      "2. Power-cycle the modem/router: unplug for 30 seconds, plug back in, wait 2 minutes. Expected: internet is restored.",
+      "3. Renew the IP address (disable/enable the adapter). Expected: a valid IP and gateway are obtained.",
+      "4. Try a known site by IP to rule out DNS, then flush DNS. Expected: pages resolve normally.",
+      "EXPECTED RESULT: Web pages load and internet access is restored.",
+      "ESCALATION CONDITIONS: No device on the network has internet (possible ISP/office outage), OR the entire office is affected."
+    ].join("\n")
+  },
+  {
+    id: "kb-vpn-will-not-connect",
+    title: "VPN will not connect",
+    category: "vpn",
+    actionId: "vpn_wont_connect",
+    content: [
+      "PROBLEM: The corporate VPN fails to connect or drops repeatedly.",
+      "TROUBLESHOOTING STEPS:",
+      "1. Confirm the device has working internet without the VPN. Expected: general browsing works.",
+      "2. Sign out and back into the VPN client, re-entering credentials/MFA. Expected: authentication succeeds.",
+      "3. Switch to a different VPN server/region if available. Expected: connection establishes on an alternate gateway.",
+      "4. Restart the VPN client and the device. Expected: a clean client session connects.",
+      "EXPECTED RESULT: The VPN connects and internal resources are reachable.",
+      "ESCALATION CONDITIONS: Correct credentials still fail, the VPN gateway appears down, or many users cannot connect."
+    ].join("\n")
+  },
+  {
+    id: "kb-printer-not-printing",
+    title: "Printer not printing",
+    category: "hardware",
+    actionId: "printer_not_printing",
+    content: [
+      "PROBLEM: Documents do not print, or the printer shows offline/error.",
+      "TROUBLESHOOTING STEPS:",
+      "1. Check the printer is powered on, has paper and toner/ink, and no error lights. Expected: printer shows ready.",
+      "2. Confirm the printer is set as default and shows 'Online' (not paused). Expected: status is Online.",
+      "3. Clear the print queue and resend the job. Expected: the stuck job clears and the new job prints.",
+      "4. Restart the Print Spooler service (or restart the computer). Expected: printing resumes.",
+      "5. Reinstall/reconnect the printer driver. Expected: the printer is detected and prints a test page.",
+      "EXPECTED RESULT: A test page or document prints successfully.",
+      "ESCALATION CONDITIONS: Hardware fault (paper jam that cannot be cleared, hardware error code), or a shared office printer is down for many users."
+    ].join("\n")
+  },
+  {
+    id: "kb-outlook-email",
+    title: "Outlook not sending or receiving",
+    category: "software",
+    actionId: "outlook_not_working",
+    content: [
+      "PROBLEM: Outlook will not send/receive email or is stuck 'Trying to connect'.",
+      "TROUBLESHOOTING STEPS:",
+      "1. Check internet connectivity. Expected: browsing works.",
+      "2. Confirm Outlook is Online (Send/Receive tab, not Work Offline). Expected: status is Connected.",
+      "3. Send/Receive All Folders manually. Expected: mail syncs.",
+      "4. Restart Outlook, then restart the computer. Expected: the profile reconnects.",
+      "5. Verify credentials / re-authenticate the account if prompted. Expected: mailbox authenticates.",
+      "EXPECTED RESULT: Email sends and receives normally.",
+      "ESCALATION CONDITIONS: Mailbox authentication keeps failing, mailbox is full/locked, or the mail server is unreachable for many users."
+    ].join("\n")
+  },
+  {
+    id: "kb-password-account-access",
+    title: "Cannot log in / password issues",
+    category: "account",
+    actionId: "password_account_issues",
+    content: [
+      "PROBLEM: The user cannot sign in, or the account is locked.",
+      "TROUBLESHOOTING STEPS:",
+      "1. Confirm the username/email is correct and Caps Lock is off. Expected: correct credentials entered.",
+      "2. Verify the correct domain/portal is being used. Expected: sign-in page matches the account.",
+      "3. Use the self-service password reset if available. Expected: password is reset and login succeeds.",
+      "4. Complete any MFA prompt / re-register the MFA device if needed. Expected: MFA verification passes.",
+      "EXPECTED RESULT: The user successfully signs in.",
+      "ESCALATION CONDITIONS: The account is locked and self-service reset is unavailable, or MFA cannot be recovered — a technician must reset/unlock the account."
+    ].join("\n")
+  },
+  {
+    id: "kb-computer-problems",
+    title: "Computer slow, frozen, or not starting",
+    category: "system",
+    actionId: "computer_slow_frozen",
+    content: [
+      "PROBLEM: The computer is very slow, frozen, or will not start properly.",
+      "TROUBLESHOOTING STEPS:",
+      "1. Save work and restart the computer. Expected: performance improves after a reboot.",
+      "2. Close heavy or unresponsive apps (Task Manager). Expected: resources free up.",
+      "3. Check for and install pending OS updates, then reboot. Expected: stability improves.",
+      "4. Ensure enough free disk space (delete temp files if very low). Expected: the system runs normally.",
+      "5. If it will not power on, check power cable/battery and hold the power button 10s then restart. Expected: the device boots.",
+      "EXPECTED RESULT: The computer runs normally and is responsive.",
+      "ESCALATION CONDITIONS: The device will not boot after these steps, shows hardware error/blue-screen loops, or the issue is business-critical."
+    ].join("\n")
+  },
   {
     id: "kb-wifi-authentication",
     title: "Wi-Fi Authentication Runbook",

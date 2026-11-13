@@ -5,5 +5,5 @@ export interface AiMessage {
 
 export interface AiProvider {
   classifyProblem(input: string): Promise<{ category: string; severity: string; confidence: number }>;
-  generateResponse(messages: AiMessage[]): Promise<{ content: string; confidence: number }>;
+  generateResponse(messages: AiMessage[], state?: Record<string, any>): Promise<{ content: string; confidence: number; state?: Record<string, any> }>;
 }

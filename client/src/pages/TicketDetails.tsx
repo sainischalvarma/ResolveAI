@@ -105,6 +105,23 @@ export function TicketDetails() {
   const failedActions = ("failedActions" in ticket && ticket.failedActions) || [];
   const ragSources = ("ragSources" in ticket && ticket.ragSources) || [];
 
+  if (isLoading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <div className="h-4 w-40 animate-pulse rounded bg-slate-200" />
+        <div className="h-8 w-2/3 animate-pulse rounded-xl bg-slate-200" />
+        <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+          <div className="space-y-6">
+            {[1, 2, 3].map((i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-slate-100" />)}
+          </div>
+          <div className="space-y-6">
+            {[1, 2].map((i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-slate-100" />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Breadcrumb & Navigation */}

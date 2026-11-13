@@ -76,9 +76,12 @@ import {
   getAdminSettingsApi,
   updateAdminSettingApi,
   listAdminAuditLogsApi,
+  listAdminStaffRequestsApi,
+  reviewAdminStaffRequestApi,
   type AdminOverviewStats,
   type AdminUserRecord,
   type AdminStaffRecord,
+  type StaffLoginRequestRecord,
   type AdminTicketRecord,
   type AdminKnowledgeRecord,
   type AdminAiRagTelemetry,
@@ -141,6 +144,29 @@ export function AdminDashboard() {
     skills: ["Networking", "VPN", "Hardware"]
   });
   const [editingStaff, setEditingStaff] = useState<AdminStaffRecord | null>(null);
+  const [staffRequests, setStaffRequests] = useState<StaffLoginRequestRecord[]>([]);
+  const [pendingStaffCount, setPendingStaffCount] = useState<number>(0);
+  const [reviewingStaffId, setReviewingStaffId] = useState<string | null>(null);
+  const [staffViewSubTab, setStaffViewSubTab] = useState<"directory" | "requests">("directory");
+
+  const handleReviewStaffRequest = async (id: string, decision: "ACCEPT" | "REJECT") => {
+    setReviewingStaffId(id);
+    try {
+      const res = await reviewAdminStaffRequestApi(id, decision);
+      notify("success", res.message);
+      const [staffRes, reqRes] = await Promise.all([
+        listAdminStaffApi({ search: staffSearch, department: staffDeptFilter }),
+        listAdminStaffRequestsApi().catch(() => ({ requests: [], pendingCount: 0 }))
+      ]);
+      setStaffList(staffRes.staff);
+      setStaffRequests(reqRes.requests);
+      setPendingStaffCount(reqRes.pendingCount);
+    } catch (err: any) {
+      notify("error", err?.response?.data?.message || err?.message || "Failed to review staff request");
+    } finally {
+      setReviewingStaffId(null);
+    }
+  };
 
   // 4. Tickets data
   const [tickets, setTickets] = useState<AdminTicketRecord[]>([]);
@@ -194,14 +220,28 @@ export function AdminDashboard() {
       setLoading(true);
       try {
         if (activeTab === "overview") {
-          const stats = await getAdminOverviewApi();
-          if (isMounted) setOverview(stats);
+          const [stats, reqRes] = await Promise.all([
+            getAdminOverviewApi(),
+            listAdminStaffRequestsApi().catch(() => ({ requests: [], pendingCount: 0 }))
+          ]);
+          if (isMounted) {
+            setOverview(stats);
+            setStaffRequests(reqRes.requests);
+            setPendingStaffCount(reqRes.pendingCount);
+          }
         } else if (activeTab === "users") {
           const res = await listAdminUsersApi({ search: userSearch, role: userRoleFilter });
           if (isMounted) setUsers(res.users);
         } else if (activeTab === "staff") {
-          const res = await listAdminStaffApi({ search: staffSearch, department: staffDeptFilter });
-          if (isMounted) setStaffList(res.staff);
+          const [res, reqRes] = await Promise.all([
+            listAdminStaffApi({ search: staffSearch, department: staffDeptFilter }),
+            listAdminStaffRequestsApi().catch(() => ({ requests: [], pendingCount: 0 }))
+          ]);
+          if (isMounted) {
+            setStaffList(res.staff);
+            setStaffRequests(reqRes.requests);
+            setPendingStaffCount(reqRes.pendingCount);
+          }
         } else if (activeTab === "tickets") {
           const [tRes, sRes] = await Promise.all([
             listAdminTicketsApi({
@@ -504,9 +544,9 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 pb-16">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-16">
       {/* Top Banner / Breadcrumb */}
-      <header className="border-b border-slate-200 bg-white sticky top-0 z-20 shadow-sm">
+      <header className="border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-teal-600 flex items-center justify-center text-white shadow-md shadow-teal-500/20">
@@ -514,15 +554,15 @@ export function AdminDashboard() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-slate-900">ResolveAI Admin Console</h1>
-                <span className="rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800 border border-teal-200">
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">ResolveAI Admin Console</h1>
+                <span className="rounded-full bg-teal-100 dark:bg-teal-950/60 px-2 py-0.5 text-xs font-semibold text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60">
                   Role: Administrator
                 </span>
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 border border-slate-200">
+                <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                   MongoDB Atlas
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                 Central control for Users, Staff, Tickets, Knowledge Base, Vector RAG & Research Metrics
               </p>
             </div>
@@ -532,21 +572,21 @@ export function AdminDashboard() {
             <button
               onClick={() => setRefreshKey((k) => k + 1)}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-sm transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} />
               Refresh
             </button>
             <div className="text-right hidden sm:block">
-              <div className="text-xs font-medium text-slate-800">{user?.name}</div>
-              <div className="text-[11px] text-slate-400">{user?.email}</div>
+              <div className="text-xs font-medium text-slate-800 dark:text-slate-200">{user?.name}</div>
+              <div className="text-[11px] text-slate-400 dark:text-slate-400">{user?.email}</div>
             </div>
           </div>
         </div>
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 no-scrollbar border-t border-slate-100 text-xs font-medium">
+          <nav className="flex space-x-1 sm:space-x-2 overflow-x-auto py-2 no-scrollbar border-t border-slate-100 dark:border-slate-800 text-xs font-medium">
             {[
               { id: "overview", label: "Admin Overview", icon: Activity },
               { id: "users", label: "User Management", icon: Users },
@@ -566,11 +606,11 @@ export function AdminDashboard() {
                   onClick={() => setActiveTab(tab.id as AdminTab)}
                   className={`flex items-center gap-2 px-3.5 py-2 rounded-lg whitespace-nowrap transition-all ${
                     isActive
-                      ? "bg-slate-900 text-white font-semibold shadow-sm"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                      ? "bg-slate-900 dark:bg-teal-600 text-white font-semibold shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <Icon className={`h-4 w-4 ${isActive ? "text-teal-400" : "text-slate-400"}`} />
+                  <Icon className={`h-4 w-4 ${isActive ? "text-teal-400 dark:text-white" : "text-slate-400"}`} />
                   {tab.label}
                 </button>
               );
@@ -611,6 +651,35 @@ export function AdminDashboard() {
         {/* ================================================================= */}
         {activeTab === "overview" && (
           <div className="space-y-6">
+            {/* Pending Staff Review Alert Banner */}
+            {pendingStaffCount > 0 && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 border border-amber-200 text-amber-800 flex items-center justify-center shrink-0">
+                    <Clock className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-amber-900">
+                      {pendingStaffCount} Staff Login Request{pendingStaffCount > 1 ? "s" : ""} Pending Review
+                    </h4>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      New staff members have submitted access requests and are waiting for your approval before they can log in.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("staff");
+                    setStaffViewSubTab("requests");
+                  }}
+                  className="px-3.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-sm transition-colors whitespace-nowrap self-start sm:self-auto cursor-pointer"
+                >
+                  Review Requests ({pendingStaffCount})
+                </button>
+              </div>
+            )}
+
             {/* Stat Cards */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -1104,6 +1173,151 @@ export function AdminDashboard() {
         {/* ================================================================= */}
         {activeTab === "staff" && (
           <div className="space-y-4">
+            {/* Sub-navigation: Staff Directory vs Pending Login Requests */}
+            <div className="flex items-center gap-2 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setStaffViewSubTab("directory")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                  staffViewSubTab === "directory"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>Active Staff Directory ({staffList.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStaffViewSubTab("requests")}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
+                  staffViewSubTab === "requests"
+                    ? "bg-amber-600 text-white shadow-sm"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                }`}
+              >
+                <Clock className="w-3.5 h-3.5" />
+                <span>Pending Staff Login Requests</span>
+                {pendingStaffCount > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-400 text-slate-950 font-black">
+                    {pendingStaffCount}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* PENDING REQUESTS REVIEW VIEW */}
+            {staffViewSubTab === "requests" && (
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Staff Access Requests Pending Review</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Review registration and Google login requests for Staff roles. You have permission to accept or reject each request.
+                    </p>
+                  </div>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
+                    {staffRequests.filter((r) => r.status === "PENDING_APPROVAL").length} Pending
+                  </span>
+                </div>
+
+                {staffRequests.filter((r) => r.status === "PENDING_APPROVAL").length === 0 ? (
+                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center shadow-sm">
+                    <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                    <h4 className="text-sm font-bold text-slate-900">All caught up!</h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                      There are currently no pending staff login requests waiting for review. When new staff members sign in, their requests will appear here.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {staffRequests
+                      .filter((r) => r.status === "PENDING_APPROVAL")
+                      .map((req) => {
+                        const isReviewing = reviewingStaffId === req.id;
+                        return (
+                          <div
+                            key={req.id}
+                            className="bg-white rounded-2xl border border-amber-200/80 p-5 shadow-sm space-y-4 relative overflow-hidden"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-orange-400 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-sm">
+                                  {req.name
+                                    ? req.name
+                                        .split(" ")
+                                        .map((p) => p[0])
+                                        .join("")
+                                        .toUpperCase()
+                                        .slice(0, 2)
+                                    : "ST"}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-slate-900 truncate">{req.name}</h4>
+                                  <p className="text-xs text-slate-500 truncate">{req.email}</p>
+                                </div>
+                              </div>
+                              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                                Pending Approval
+                              </span>
+                            </div>
+
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 text-xs space-y-1.5 text-slate-600">
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Department:</span>
+                                <span className="font-semibold text-slate-800">{req.department || "IT Support"}</span>
+                              </div>
+                              {req.phone && (
+                                <div className="flex justify-between">
+                                  <span className="text-slate-400">Phone:</span>
+                                  <span className="font-semibold text-slate-800">{req.phone}</span>
+                                </div>
+                              )}
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Requested Role:</span>
+                                <span className="font-semibold text-blue-700">{req.role}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-slate-400">Requested At:</span>
+                                <span className="text-slate-600 font-mono text-[11px]">
+                                  {new Date(req.staffRequestedAt || req.createdAt).toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Action Buttons: Accept / Reject */}
+                            <div className="flex items-center gap-2 pt-1">
+                              <button
+                                type="button"
+                                disabled={isReviewing}
+                                onClick={() => void handleReviewStaffRequest(req.id, "ACCEPT")}
+                                className="flex-1 py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                              >
+                                <Check className="w-4 h-4" />
+                                <span>Accept Request</span>
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isReviewing}
+                                onClick={() => void handleReviewStaffRequest(req.id, "REJECT")}
+                                className="flex-1 py-2 px-3 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold shadow-sm flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                              >
+                                <X className="w-4 h-4" />
+                                <span>Reject Request</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DIRECTORY VIEW */}
+            {staffViewSubTab === "directory" && (
+              <>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
               <div className="flex items-center gap-2 flex-1 max-w-md">
                 <Search className="h-4 w-4 text-slate-400" />
@@ -1373,6 +1587,8 @@ export function AdminDashboard() {
                   </form>
                 </div>
               </div>
+            )}
+            </>
             )}
           </div>
         )}

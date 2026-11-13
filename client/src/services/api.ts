@@ -15,14 +15,43 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Auto-logout on 401 responses (stale/invalid token)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 401 &&
+      !error.config?.url?.includes("/auth/login") &&
+      !error.config?.url?.includes("/auth/register") &&
+      !error.config?.url?.includes("/auth/me")
+    ) {
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY) ?? "";
+      const isMockToken = token.startsWith("mock-") || token.startsWith("switched-") || token.startsWith("google-session-");
+      if (!isMockToken) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        localStorage.removeItem(USER_STORAGE_KEY);
+        if (window.location.pathname !== "/login") {
+          window.location.href = "/login";
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: "USER" | "STAFF" | "TECHNICIAN" | "ADMIN";
+  googleId?: string;
+  profileImage?: string;
+  status?: string;
   department?: string;
   phone?: string;
   active: boolean;
+  lastLogin?: string;
 }
 
 export interface AuthSession {
@@ -86,6 +115,7 @@ export interface ChatConversationRecord {
   userId: string;
   title: string;
   messages: ChatMessageRecord[];
+  state?: Record<string, any>;
   createdAt: string;
   updatedAt: string;
 }
@@ -169,8 +199,46 @@ export async function deleteChatConversation(conversationId: string, userId?: st
   return response.data;
 }
 
-export async function loginApi(credentials: { email: string; password: string }) {
-  const response = await api.post<AuthSession>("/auth/login", credentials);
+export type LoginApiResponse =
+  | AuthSession
+  | {
+      requirePasskey: true;
+      email: string;
+      name: string;
+      role: "ADMIN";
+    };
+
+export async function loginApi(credentials: { email: string; password: string; passkey?: string }): Promise<LoginApiResponse> {
+  const response = await api.post<LoginApiResponse>("/auth/login", credentials);
+  return response.data;
+}
+
+export async function loginWithGoogleApi(data: {
+  credential?: string;
+  googleId?: string;
+  email?: string;
+  name?: string;
+  profileImage?: string;
+  role?: string;
+  department?: string;
+  passkey?: string;
+}): Promise<AuthSession> {
+  const response = await api.post<AuthSession>("/auth/google", data);
+  return response.data;
+}
+
+export async function contributeStaffKnowledgeApi(data: {
+  ticketId?: string;
+  title: string;
+  problem: string;
+  rootCause?: string;
+  troubleshootingSteps: string[] | string;
+  solution: string;
+  category: string;
+  tags?: string[] | string;
+  department?: string;
+}) {
+  const response = await api.post("/staff/knowledge", data);
   return response.data;
 }
 
@@ -459,6 +527,15 @@ export interface StaffTicketItem {
   createdAt: string;
   updatedAt: string;
   technicianActionsCount?: number;
+  resolution?: {
+    summary?: string;
+    rootCause?: string;
+    actionsTaken?: string[];
+    kbRecommendation?: string;
+    resolvedBy?: string;
+    resolvedByName?: string;
+    resolvedAt?: string;
+  };
 }
 
 export interface StaffTicketDetailsResponse {
@@ -723,6 +800,23 @@ export interface AdminStaffRecord {
   assignedTickets?: Array<{ id: string; title: string; priority: string; status: string }>;
 }
 
+export interface StaffLoginRequestRecord {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  phone?: string;
+  status: "PENDING_APPROVAL" | "ACTIVE" | "REJECTED" | "DISABLED";
+  active: boolean;
+  profileImage?: string;
+  staffRequestedAt?: string;
+  staffReviewedAt?: string;
+  staffReviewedBy?: string;
+  createdAt: string;
+}
+
 export interface AdminTicketRecord {
   id: string;
   title: string;
@@ -901,6 +995,29 @@ export async function listAdminStaffApi(params?: {
   limit?: number;
 }): Promise<{ staff: AdminStaffRecord[]; pagination: any }> {
   const response = await api.get<{ staff: AdminStaffRecord[]; pagination: any }>("/admin/staff", { params });
+  return response.data;
+}
+
+export async function listAdminStaffRequestsApi(): Promise<{
+  requests: StaffLoginRequestRecord[];
+  pendingCount: number;
+}> {
+  const response = await api.get<{
+    requests: StaffLoginRequestRecord[];
+    pendingCount: number;
+  }>("/admin/staff-requests");
+  return response.data;
+}
+
+export async function reviewAdminStaffRequestApi(
+  id: string,
+  decision: "ACCEPT" | "REJECT",
+  notes?: string
+): Promise<{ success: boolean; decision: string; message: string; user?: any }> {
+  const response = await api.put<{ success: boolean; decision: string; message: string; user?: any }>(
+    `/admin/staff-requests/${id}/review`,
+    { decision, notes }
+  );
   return response.data;
 }
 

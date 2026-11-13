@@ -37,15 +37,77 @@ function ProtectedRoutes() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        {/* Default route: if admin, AdminDashboard; if staff, TechnicianDashboard; else UserDashboard */}
-        <Route index element={isAdmin ? <AdminDashboard /> : isStaff ? <TechnicianDashboard /> : <UserDashboard />} />
+        {/* Default route: redirect to role-specific dashboard */}
+        <Route
+          index
+          element={
+            isAdmin ? (
+              <Navigate to="/admin/dashboard" replace />
+            ) : isStaff ? (
+              <Navigate to="/staff/dashboard" replace />
+            ) : (
+              <Navigate to="/user/dashboard" replace />
+            )
+          }
+        />
+
+        {/* Dedicated role dashboard routes */}
+        <Route path="user/dashboard" element={<UserDashboard />} />
+        <Route
+          path="staff/dashboard"
+          element={isStaff || isAdmin ? <TechnicianDashboard /> : <Navigate to="/user/dashboard" replace />}
+        />
+        <Route
+          path="admin/dashboard"
+          element={
+            isAdmin ? (
+              <AdminDashboard />
+            ) : isStaff ? (
+              <Navigate to="/staff/dashboard" replace />
+            ) : (
+              <Navigate to="/user/dashboard" replace />
+            )
+          }
+        />
+
+        {/* Route aliases and features */}
+        <Route
+          path="dashboard"
+          element={
+            isAdmin ? (
+              <Navigate to="/admin/dashboard" replace />
+            ) : isStaff ? (
+              <Navigate to="/staff/dashboard" replace />
+            ) : (
+              <UserDashboard />
+            )
+          }
+        />
         <Route path="support" element={<AiSupport />} />
         <Route path="tickets" element={<Tickets />} />
         <Route path="tickets/:id" element={<TicketDetails />} />
         <Route path="sessions" element={<TroubleshootingSessions />} />
         <Route path="sessions/:id" element={<TroubleshootingSessions />} />
-        <Route path="technician" element={<TechnicianDashboard />} />
-        <Route path="admin" element={isAdmin ? <AdminDashboard /> : <Navigate to="/" replace />} />
+        <Route
+          path="technician"
+          element={isStaff || isAdmin ? <TechnicianDashboard /> : <Navigate to="/user/dashboard" replace />}
+        />
+        <Route
+          path="staff"
+          element={isStaff || isAdmin ? <TechnicianDashboard /> : <Navigate to="/user/dashboard" replace />}
+        />
+        <Route
+          path="admin"
+          element={
+            isAdmin ? (
+              <AdminDashboard />
+            ) : isStaff ? (
+              <Navigate to="/staff/dashboard" replace />
+            ) : (
+              <Navigate to="/user/dashboard" replace />
+            )
+          }
+        />
         <Route path="technicians" element={isAdmin ? <TechnicianManagement /> : <Navigate to="/" replace />} />
         <Route path="knowledge" element={isAdmin ? <KnowledgeBase /> : <Navigate to="/" replace />} />
         <Route path="analytics" element={isAdmin ? <Analytics /> : <Navigate to="/" replace />} />

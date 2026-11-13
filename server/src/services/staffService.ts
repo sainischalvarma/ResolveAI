@@ -8,10 +8,13 @@ import {
   TroubleshootingSessionModel,
   ActionOutcomeModel,
   ConversationModel,
-  MessageModel
+  MessageModel,
+  KnowledgeDocumentModel,
+  AuditLogModel
 } from "../models/index.js";
 import { createNotification } from "./notificationService.js";
 import { AssignmentService } from "./assignment/AssignmentService.js";
+import { createRagService } from "./rag/RagService.js";
 
 function isDatabaseConnected(): boolean {
   return mongoose.connection.readyState === 1;
@@ -110,7 +113,7 @@ const devTechnicians: Map<string, DevTechnicianProfile> = new Map([
   ]
 ]);
 
-const devStaffTickets: Map<string, DevStaffTicket> = new Map([
+export const devStaffTickets: Map<string, DevStaffTicket> = new Map([
   [
     "ticket-dev-1",
     {
@@ -1198,6 +1201,33 @@ export async function resolveTicket(
       relatedTicketId: ticket.id
     });
 
+    // Save verified solution into Knowledge Base & Vector Index
+    try {
+      const ragService = createRagService();
+      const verifiedTitle = `Resolved: ${ticket.title}`;
+      const verifiedContent = [
+        `PROBLEM: ${ticket.title}`,
+        ticket.description ? `DESCRIPTION: ${ticket.description}` : "",
+        input.rootCause ? `ROOT CAUSE: ${input.rootCause}` : "",
+        `PROVEN RESOLUTION ACTIONS:\n${input.actionsTaken.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
+        `RESOLUTION SUMMARY: ${input.summary}`
+      ].filter(Boolean).join("\n\n");
+
+      await ragService.indexDocument({
+        title: verifiedTitle,
+        category: ticket.category,
+        content: verifiedContent,
+        metadata: {
+          ticketId: ticket.id,
+          resolvedBy: user.name,
+          approvalStatus: "APPROVED",
+          source: "staff_verified_resolution"
+        }
+      });
+    } catch (kbErr) {
+      console.warn("Could not index resolved ticket to vector search:", kbErr);
+    }
+
     return ticket;
   }
 
@@ -1265,6 +1295,51 @@ export async function resolveTicket(
     message: `Your ticket #${ticket._id.toString().slice(-6).toUpperCase()} has been resolved: ${input.summary.slice(0, 100)}`,
     relatedTicketId: ticket._id.toString()
   });
+
+  // Save verified solution into MongoDB Atlas Vector Search & Knowledge Base
+  try {
+    const ragService = createRagService();
+    const verifiedTitle = `Resolved: ${ticket.title}`;
+    const verifiedContent = [
+      `PROBLEM: ${ticket.title}`,
+      ticket.description ? `DESCRIPTION: ${ticket.description}` : "",
+      input.rootCause ? `ROOT CAUSE: ${input.rootCause}` : "",
+      `PROVEN RESOLUTION ACTIONS:\n${input.actionsTaken.map((a, i) => `${i + 1}. ${a}`).join("\n")}`,
+      `RESOLUTION SUMMARY: ${input.summary}`
+    ].filter(Boolean).join("\n\n");
+
+    await ragService.indexDocument({
+      title: verifiedTitle,
+      category: ticket.category,
+      content: verifiedContent,
+      metadata: {
+        ticketId: ticket._id.toString(),
+        resolvedBy: user.name,
+        approvalStatus: "APPROVED",
+        source: "staff_verified_resolution"
+      }
+    });
+
+    await KnowledgeDocumentModel.create({
+      title: verifiedTitle,
+      category: ticket.category,
+      department: "IT Support",
+      version: "v1.0",
+      content: verifiedContent,
+      chunkCount: 1,
+      status: "READY",
+      approvalStatus: "APPROVED",
+      createdBy: new mongoose.Types.ObjectId(user.id),
+      createdByName: user.name,
+      metadata: {
+        source: "staff_verified_resolution",
+        ticketId: ticket._id.toString(),
+        rootCause: input.rootCause
+      }
+    });
+  } catch (kbErr) {
+    console.warn("Could not index resolved ticket to vector search:", kbErr);
+  }
 
   return getStaffTicketDetails(user, ticketId);
 }
@@ -1659,3 +1734,96 @@ export async function intelligentAssignTicket(user: AuthenticatedUser, ticketId:
 
   return getStaffTicketDetails(user, ticketId);
 }
+
+export interface StaffKnowledgeInput {
+  ticketId?: string;
+  title: string;
+  problem: string;
+  rootCause?: string;
+  troubleshootingSteps: string[] | string;
+  solution: string;
+  category: string;
+  tags?: string[] | string;
+  department?: string;
+}
+
+export async function contributeKnowledge(actor: AuthenticatedUser, input: StaffKnowledgeInput) {
+  if (!isStaffOrAdmin(actor)) {
+    throw new Error("Access denied: Staff privileges required");
+  }
+
+  const stepsArray = Array.isArray(input.troubleshootingSteps)
+    ? input.troubleshootingSteps
+    : input.troubleshootingSteps.split("\n").filter((s) => s.trim().length > 0);
+
+  const tagsArray = Array.isArray(input.tags)
+    ? input.tags
+    : (input.tags || "").split(",").map((t) => t.trim()).filter(Boolean);
+
+  const formattedContent = [
+    `PROBLEM: ${input.problem}`,
+    input.rootCause ? `ROOT CAUSE: ${input.rootCause}` : "",
+    `TROUBLESHOOTING STEPS:\n${stepsArray.map((s, idx) => `${idx + 1}. ${s}`).join("\n")}`,
+    `FINAL SOLUTION:\n${input.solution}`,
+    tagsArray.length > 0 ? `TAGS: ${tagsArray.join(", ")}` : ""
+  ].filter(Boolean).join("\n\n");
+
+  const category = (input.category || "general").trim().toLowerCase();
+  const department = input.department?.trim() || "General";
+  const title = input.title?.trim() || `Resolved: ${input.problem.slice(0, 60)}`;
+
+  if (!isDatabaseConnected()) {
+    return {
+      success: true,
+      documentId: `dev-kb-${Date.now()}`,
+      title,
+      category,
+      approvalStatus: "PENDING",
+      message: "Knowledge submitted for administrator approval"
+    };
+  }
+
+  const documentId = new mongoose.Types.ObjectId();
+
+  const doc = await KnowledgeDocumentModel.create({
+    _id: documentId,
+    title,
+    category,
+    department,
+    version: "v1.0",
+    content: formattedContent,
+    chunkCount: 1,
+    status: "READY",
+    approvalStatus: "PENDING",
+    createdBy: new mongoose.Types.ObjectId(actor.id),
+    createdByName: actor.name,
+    metadata: {
+      source: "technician_contribution",
+      ticketId: input.ticketId,
+      rootCause: input.rootCause,
+      tags: tagsArray,
+      submittedByRole: actor.role
+    }
+  });
+
+  await AuditLogModel.create({
+    actorId: new mongoose.Types.ObjectId(actor.id),
+    actorName: actor.name,
+    actorEmail: actor.email,
+    actorRole: actor.role,
+    action: "KNOWLEDGE_CONTRIBUTED",
+    resourceType: "KnowledgeDocument",
+    resourceId: doc._id.toString(),
+    details: `Staff ${actor.name} submitted knowledge article "${title}" for review.`
+  });
+
+  return {
+    success: true,
+    documentId: doc._id.toString(),
+    title: doc.title,
+    category: doc.category,
+    approvalStatus: doc.approvalStatus,
+    message: "Knowledge submitted successfully and queued for Administrator approval before Vector Search indexing."
+  };
+}
+

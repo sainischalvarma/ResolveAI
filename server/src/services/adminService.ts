@@ -12,6 +12,7 @@ async function hashPassword(password: string): Promise<string> {
 }
 import {
   UserModel,
+  toAuthenticatedUser,
   TechnicianModel,
   TicketModel,
   TicketReplyModel,
@@ -1232,20 +1233,22 @@ export async function createKnowledgeDocument(
   const documentId = new mongoose.Types.ObjectId();
 
   // Create KnowledgeChunks with embeddings for MongoDB Atlas Vector Search
-  const chunkDocs = chunksToSave.map((textChunk, index) => ({
-    documentId: documentId.toString(),
-    chunkId: `${documentId.toString()}:${index}`,
-    title,
-    category,
-    content: textChunk,
-    embedding: embedText(`${title}\n${textChunk}`),
-    metadata: {
-      department,
-      version,
-      approvalStatus,
-      chunkIndex: index
-    }
-  }));
+  const chunkDocs = await Promise.all(
+    chunksToSave.map(async (textChunk, index) => ({
+      documentId: documentId.toString(),
+      chunkId: `${documentId.toString()}:${index}`,
+      title,
+      category,
+      content: textChunk,
+      embedding: await embedText(`${title}\n${textChunk}`),
+      metadata: {
+        department,
+        version,
+        approvalStatus,
+        chunkIndex: index
+      }
+    }))
+  );
 
   await KnowledgeChunkModel.insertMany(chunkDocs);
 
@@ -1316,11 +1319,41 @@ export async function setKnowledgeApprovalStatus(
 
   if (!doc) throw new Error("Document not found");
 
-  // Update chunk metadata so vector search respects approval
-  await KnowledgeChunkModel.updateMany(
-    { documentId },
-    { $set: { "metadata.approvalStatus": approvalStatus } }
-  );
+  if (approvalStatus === "APPROVED") {
+    const existingChunkCount = await KnowledgeChunkModel.countDocuments({ documentId });
+    if (existingChunkCount === 0 && doc.content) {
+      const paragraphs = doc.content.split(/\n\s*\n/).filter((p: string) => p.trim().length > 10);
+      const chunksToSave = paragraphs.length > 0 ? paragraphs : [doc.content];
+      const chunkDocs = await Promise.all(
+        chunksToSave.map(async (textChunk: string, index: number) => ({
+          documentId,
+          chunkId: `${documentId}:${index}`,
+          title: doc.title,
+          category: doc.category,
+          content: textChunk,
+          embedding: await embedText(`${doc.title}\n${textChunk}`),
+          metadata: {
+            department: doc.department || "General",
+            version: doc.version || "v1.0",
+            approvalStatus: "APPROVED",
+            chunkIndex: index
+          }
+        }))
+      );
+      await KnowledgeChunkModel.insertMany(chunkDocs);
+      await KnowledgeDocumentModel.findByIdAndUpdate(documentId, { chunkCount: chunkDocs.length });
+    } else {
+      await KnowledgeChunkModel.updateMany(
+        { documentId },
+        { $set: { "metadata.approvalStatus": approvalStatus } }
+      );
+    }
+  } else {
+    await KnowledgeChunkModel.updateMany(
+      { documentId },
+      { $set: { "metadata.approvalStatus": approvalStatus } }
+    );
+  }
 
   await recordAuditLog(
     actor,
@@ -1680,4 +1713,135 @@ export async function updateSystemSetting(actor: AuthenticatedUser, key: string,
   );
 
   return { success: true, key, value };
+}
+
+/* ------------------------------------------------------------------ */
+/*  10. STAFF LOGIN REQUESTS REVIEW (ACCEPT / REJECT)                 */
+/* ------------------------------------------------------------------ */
+export async function listStaffRequests(actor: AuthenticatedUser) {
+  ensureAdmin(actor);
+
+  if (!isDatabaseConnected()) {
+    return {
+      requests: [],
+      pendingCount: 0
+    };
+  }
+
+  const staffUsers = await UserModel.find({
+    role: { $in: ["STAFF", "TECHNICIAN"] }
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const requests = staffUsers.map((u) => ({
+    id: u._id.toString(),
+    userId: u._id.toString(),
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    department: u.department || "IT Support",
+    phone: u.phone || "",
+    status: (u as any).status || (u.active ? "ACTIVE" : "DISABLED"),
+    active: u.active,
+    profileImage: u.profileImage,
+    staffRequestedAt: (u as any).staffRequestedAt
+      ? new Date((u as any).staffRequestedAt).toISOString()
+      : new Date((u as any).createdAt).toISOString(),
+    staffReviewedAt: (u as any).staffReviewedAt
+      ? new Date((u as any).staffReviewedAt).toISOString()
+      : undefined,
+    staffReviewedBy: (u as any).staffReviewedBy,
+    createdAt: new Date((u as any).createdAt).toISOString()
+  }));
+
+  const pendingRequests = requests.filter((r) => r.status === "PENDING_APPROVAL");
+
+  return {
+    requests,
+    pendingCount: pendingRequests.length
+  };
+}
+
+export async function reviewStaffRequest(
+  actor: AuthenticatedUser,
+  userId: string,
+  decision: "ACCEPT" | "REJECT",
+  notes?: string
+) {
+  ensureAdmin(actor);
+
+  if (decision !== "ACCEPT" && decision !== "REJECT") {
+    throw new Error("Invalid review decision: must be ACCEPT or REJECT");
+  }
+
+  if (!isDatabaseConnected()) {
+    return {
+      success: true,
+      decision,
+      message: `Staff login request ${decision === "ACCEPT" ? "accepted" : "rejected"} successfully`
+    };
+  }
+
+  const user = await UserModel.findById(userId);
+  if (!user) {
+    throw new Error("Staff request user not found");
+  }
+
+  if (decision === "ACCEPT") {
+    user.status = "ACTIVE";
+    user.active = true;
+    (user as any).staffReviewedAt = new Date();
+    (user as any).staffReviewedBy = actor.email;
+    await user.save();
+
+    // Ensure technician record exists
+    let tech = await TechnicianModel.findOne({ userId: user._id });
+    if (!tech) {
+      await TechnicianModel.create({
+        userId: user._id,
+        skills: ["network", "vpn", "wi-fi", "hardware", "software", "system"],
+        availability: "AVAILABLE",
+        workload: 0,
+        capacity: 5,
+        averageResolutionHours: 1.5
+      });
+    }
+
+    await recordAuditLog(
+      actor,
+      "STAFF_REQUEST_ACCEPTED",
+      "User",
+      user._id.toString(),
+      `Admin accepted staff login request for ${user.name} (${user.email})${notes ? `. Notes: ${notes}` : ""}`
+    );
+
+    return {
+      success: true,
+      decision: "ACCEPT",
+      message: `Staff login request for ${user.name} approved. They can now log in.`,
+      user: toAuthenticatedUser(user)
+    };
+  } else {
+    user.status = "REJECTED";
+    user.active = false;
+    (user as any).staffReviewedAt = new Date();
+    (user as any).staffReviewedBy = actor.email;
+    await user.save();
+
+    await recordAuditLog(
+      actor,
+      "STAFF_REQUEST_REJECTED",
+      "User",
+      user._id.toString(),
+      `Admin rejected staff login request for ${user.name} (${user.email})${notes ? `. Notes: ${notes}` : ""}`
+    );
+
+    return {
+      success: true,
+      decision: "REJECT",
+      message: `Staff login request for ${user.name} has been rejected.`,
+      user: toAuthenticatedUser(user)
+    };
+  }
 }

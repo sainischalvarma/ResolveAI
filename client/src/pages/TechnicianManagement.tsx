@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Briefcase,
+  Check,
   CheckCircle,
+  CheckCircle2,
   Clock,
   Download,
   Filter,
@@ -24,6 +26,11 @@ import { PageHeader } from "../components/PageHeader";
 import { StatusBadge } from "../components/StatusBadge";
 import { technicians as initialTechnicians } from "../data/demoData";
 import { Technician } from "../types/domain";
+import {
+  listAdminStaffRequestsApi,
+  reviewAdminStaffRequestApi,
+  type StaffLoginRequestRecord
+} from "../services/api";
 
 type ViewMode = "grid" | "table";
 type StatusFilter = "ALL" | "Available" | "Busy" | "Offline";
@@ -53,6 +60,35 @@ export function TechnicianManagement() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [selectedStaffForContact, setSelectedStaffForContact] = useState<Technician | null>(null);
   const [staffToDelete, setStaffToDelete] = useState<Technician | null>(null);
+
+  // Staff Login Requests state
+  const [pendingRequests, setPendingRequests] = useState<StaffLoginRequestRecord[]>([]);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+
+  const loadRequests = async () => {
+    try {
+      const res = await listAdminStaffRequestsApi();
+      setPendingRequests(res.requests.filter((r) => r.status === "PENDING_APPROVAL"));
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadRequests();
+  }, []);
+
+  const handleReview = async (id: string, decision: "ACCEPT" | "REJECT") => {
+    setReviewingId(id);
+    try {
+      await reviewAdminStaffRequestApi(id, decision);
+      await loadRequests();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setReviewingId(null);
+    }
+  };
 
   // Sync to localStorage
   useEffect(() => {
@@ -230,6 +266,75 @@ export function TechnicianManagement() {
       />
 
       <main className="space-y-6 p-6">
+        {/* Pending Staff Review Section */}
+        {pendingRequests.length > 0 && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50/70 p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 text-amber-700 flex items-center justify-center">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Pending Staff Login Requests ({pendingRequests.length})
+                  </h3>
+                  <p className="text-xs text-slate-600">
+                    Review staff members requesting workbench access. Either accept or reject their login request.
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                Action Required
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-2">
+              {pendingRequests.map((req) => (
+                <div key={req.id} className="bg-white rounded-xl border border-amber-200 p-4 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-slate-900 truncate">{req.name}</h4>
+                      <p className="text-[11px] text-slate-500 truncate">{req.email}</p>
+                      <p className="text-[11px] text-slate-600 mt-1">
+                        Dept: <span className="font-semibold">{req.department || "IT Support"}</span>
+                      </p>
+                      {req.phone && (
+                        <p className="text-[11px] text-slate-600">
+                          Phone: <span className="font-semibold">{req.phone}</span>
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                      Pending
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={reviewingId === req.id}
+                      onClick={() => void handleReview(req.id, "ACCEPT")}
+                      className="flex-1 py-1.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-sm flex items-center justify-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Accept</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={reviewingId === req.id}
+                      onClick={() => void handleReview(req.id, "REJECT")}
+                      className="flex-1 py-1.5 px-2 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold shadow-sm flex items-center justify-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>Reject</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* KPI Metric Summary Cards */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

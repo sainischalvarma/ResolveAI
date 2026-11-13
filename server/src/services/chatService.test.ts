@@ -43,7 +43,8 @@ describe("chatService development conversations", () => {
     const continued = await appendMessage(conversation.id, "Yes.", "user-1");
 
     expect(continued.messages).toHaveLength(4);
-    expect(continued.messages[3]?.content).toContain("Wi-Fi is enabled");
+    expect(continued.messages[3]?.content).toContain("Step 2:");
+    expect(continued.messages[3]?.content).toContain("laptop");
   });
 
   it("retrieves conversation history and lists previous conversations", async () => {

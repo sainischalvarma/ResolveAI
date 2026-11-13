@@ -30,13 +30,17 @@ export const optionalAuthenticate: RequestHandler = async (req, _res, next) => {
     const [scheme, token] = header.split(" ");
 
     if (scheme !== "Bearer" || !token) {
-      throw new AuthenticationError("Invalid authorization header");
+      // Invalid header format — skip auth silently for optional routes
+      next();
+      return;
     }
 
     req.authUser = await getUserFromToken(token);
     next();
-  } catch (error) {
-    next(error);
+  } catch {
+    // Token is invalid or expired — skip auth silently for optional routes
+    // The request will continue without req.authUser set
+    next();
   }
 };
 

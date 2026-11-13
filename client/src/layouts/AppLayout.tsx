@@ -29,9 +29,9 @@ export function AppLayout() {
   // Dynamic navigation items based on whether user is ADMIN, STAFF, or USER
   const navItems = isAdmin
     ? [
-        { label: "Admin Console", to: "/admin", icon: ShieldCheck },
-        { label: "Staff Workbench", to: "/technician", icon: Wrench },
-        { label: "User Portal", to: "/", icon: LayoutDashboard },
+        { label: "Admin Console", to: "/admin/dashboard", icon: ShieldCheck },
+        { label: "Staff Workbench", to: "/staff/dashboard", icon: Wrench },
+        { label: "User Portal", to: "/user/dashboard", icon: LayoutDashboard },
         { label: "AI Support", to: "/support", icon: Bot },
         { label: "All Tickets", to: "/tickets", icon: ClipboardList },
         { label: "Staff Directory", to: "/technicians", icon: Users },
@@ -42,14 +42,14 @@ export function AppLayout() {
       ]
     : isStaff
     ? [
-        { label: "Technician Workbench", to: "/technician", icon: Wrench },
+        { label: "Technician Workbench", to: "/staff/dashboard", icon: Wrench },
         { label: "Ticket Queue", to: "/tickets", icon: ClipboardList },
         { label: "AI Support Agent", to: "/support", icon: Bot },
         { label: "Notifications", to: "/notifications", icon: Bell },
         { label: "Settings", to: "/settings", icon: Settings }
       ]
     : [
-        { label: "User Dashboard", to: "/", icon: LayoutDashboard },
+        { label: "User Dashboard", to: "/user/dashboard", icon: LayoutDashboard },
         { label: "AI Support Agent", to: "/support", icon: Bot },
         { label: "My Sessions", to: "/sessions", icon: Wrench },
         { label: "My Tickets", to: "/tickets", icon: ClipboardList },
@@ -110,7 +110,7 @@ export function AppLayout() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end={item.to === "/" || item.to === "/admin" || item.to === "/technician"}
+                end={item.to === "/user/dashboard" || item.to === "/admin/dashboard" || item.to === "/staff/dashboard" || item.to === "/"}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 hover:bg-white/10 hover:text-white transition-all",

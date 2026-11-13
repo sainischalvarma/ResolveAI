@@ -11,8 +11,13 @@ import {
   MessageSquare,
   RefreshCw,
   Sparkles,
+  Star,
+  ThumbsDown,
+  ThumbsUp,
   Ticket,
-  TrendingUp
+  TrendingUp,
+  User as UserIcon,
+  X
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/PageHeader";
@@ -42,6 +47,14 @@ export function UserDashboard() {
   const [recentResolved, setRecentResolved] = useState<TroubleshootingSessionItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Feedback Modal State
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [feedbackSession, setFeedbackSession] = useState<TroubleshootingSessionItem | null>(null);
+  const [feedbackHelpful, setFeedbackHelpful] = useState<boolean>(true);
+  const [feedbackRating, setFeedbackRating] = useState<number>(5);
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     setIsLoading(true);
@@ -137,7 +150,7 @@ export function UserDashboard() {
               type="button"
               onClick={loadDashboard}
               disabled={isLoading}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 shadow-2xs disabled:opacity-50 transition-all"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs disabled:opacity-50 transition-all"
             >
               <RefreshCw className={cn("h-3.5 w-3.5", isLoading && "animate-spin")} />
               Refresh
@@ -161,19 +174,65 @@ export function UserDashboard() {
           </div>
         )}
 
+        {/* User Profile Overview & Quick Chatbot Access Banner */}
+        <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 p-6 text-white shadow-xl relative overflow-hidden">
+          <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                {user?.profileImage ? (
+                  <img
+                    src={user.profileImage}
+                    alt={user.name}
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-teal-400 shadow-md"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-teal-600 to-cyan-500 text-white font-extrabold text-lg flex items-center justify-center border-2 border-white/20 shadow-md">
+                    {user?.name ? user.name.slice(0, 2).toUpperCase() : "US"}
+                  </div>
+                )}
+                <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl font-bold text-white tracking-tight">{user?.name || "Employee User"}</h1>
+                  <span className="px-2.5 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/40 text-[10px] font-bold uppercase">
+                    {user?.role || "USER"}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">{user?.email || "user@resolveai.com"}</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Department: <span className="text-slate-200 font-semibold">{user?.department || "General Enterprise"}</span> &bull; Status: <span className="text-emerald-400 font-semibold">Active</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <Link
+                to="/support"
+                className="w-full sm:w-auto px-5 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-400 hover:to-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 transition-all active:scale-95"
+              >
+                <Sparkles className="w-4 h-4 text-slate-950" />
+                <span>Ask ResolveAI</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {metrics.map((metric) => (
             <article
               key={metric.label}
-              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs hover:shadow-md transition-all duration-300"
+              className="group relative overflow-hidden rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs hover:shadow-md transition-all duration-300"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{metric.label}</p>
-                  <p className="mt-2 text-3xl font-bold text-slate-950 tabular-nums">
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{metric.label}</p>
+                  <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white tabular-nums">
                     {isLoading ? (
-                      <span className="inline-block h-8 w-12 animate-pulse rounded-lg bg-slate-200" />
+                      <span className="inline-block h-8 w-12 animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800" />
                     ) : (
                       metric.value
                     )}
@@ -188,9 +247,9 @@ export function UserDashboard() {
               </div>
               <p className={cn(
                 "mt-3 text-xs font-medium",
-                metric.tone === "good" && "text-emerald-600",
-                metric.tone === "warn" && "text-amber-600",
-                metric.tone === "neutral" && "text-slate-500"
+                metric.tone === "good" && "text-emerald-600 dark:text-emerald-400",
+                metric.tone === "warn" && "text-amber-600 dark:text-amber-400",
+                metric.tone === "neutral" && "text-slate-500 dark:text-slate-400"
               )}>
                 {metric.delta}
               </p>
@@ -207,13 +266,13 @@ export function UserDashboard() {
           {/* Left: Active Sessions + Recent Tickets */}
           <div className="space-y-6">
             {/* Active Troubleshooting Sessions */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-violet-100 text-violet-700">
+                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-violet-100 dark:bg-violet-950/60 text-violet-700 dark:text-violet-300">
                     <Activity className="h-4 w-4" />
                   </div>
-                  <h2 className="text-sm font-bold text-slate-900">Active Troubleshooting</h2>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">Active Troubleshooting</h2>
                   {activeSessions.length > 0 && (
                     <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
                       {activeSessions.length}
@@ -271,47 +330,47 @@ export function UserDashboard() {
             </div>
 
             {/* Recent Tickets */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-5 py-4">
                 <div className="flex items-center gap-2">
-                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-amber-100 text-amber-700">
+                  <div className="grid h-7 w-7 place-items-center rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
                     <Ticket className="h-4 w-4" />
                   </div>
-                  <h2 className="text-sm font-bold text-slate-900">My Tickets</h2>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-white">My Tickets</h2>
                 </div>
-                <Link to="/tickets" className="text-xs font-semibold text-teal-600 hover:text-teal-800">
+                <Link to="/tickets" className="text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300">
                   View all
                 </Link>
               </div>
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {isLoading ? (
                   <div className="p-4 space-y-3">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100" />
+                      <div key={i} className="h-12 animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
                     ))}
                   </div>
                 ) : recentTickets.length === 0 ? (
                   <div className="p-8 text-center">
-                    <MessageSquare className="mx-auto h-8 w-8 text-slate-300 mb-2" />
-                    <p className="text-xs font-medium text-slate-500">No tickets yet</p>
-                    <p className="text-[11px] text-slate-400 mt-1">Try AI Support first — tickets are created only when needed.</p>
+                    <MessageSquare className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600 mb-2" />
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">No tickets yet</p>
+                    <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">Try AI Support first — tickets are created only when needed.</p>
                   </div>
                 ) : (
                   recentTickets.map((ticket) => (
                     <Link
                       key={ticket.id}
                       to={`/tickets/${ticket.id}`}
-                      className="flex items-center justify-between px-5 py-3 hover:bg-slate-50/70 transition-colors group"
+                      className="flex items-center justify-between px-5 py-3 hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors group"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <span className="font-mono text-[11px] font-bold text-slate-500 shrink-0">
+                        <span className="font-mono text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
                           #{ticket.id.slice(-6).toUpperCase()}
                         </span>
-                        <p className="text-xs font-medium text-slate-800 truncate">{ticket.title}</p>
+                        <p className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate">{ticket.title}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <StatusBadge value={ticket.status} />
-                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 group-hover:text-teal-600" />
+                        <ArrowRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 group-hover:text-teal-600 dark:group-hover:text-teal-400" />
                       </div>
                     </Link>
                   ))
@@ -323,61 +382,61 @@ export function UserDashboard() {
           {/* Right Sidebar */}
           <div className="space-y-6">
             {/* Quick Actions */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-              <h2 className="text-sm font-bold text-slate-900 mb-4">Quick Actions</h2>
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4">Quick Actions</h2>
               <div className="space-y-2">
                 <Link
                   to="/support"
-                  className="flex items-center gap-3 rounded-xl border border-teal-200/60 bg-gradient-to-r from-teal-50 to-emerald-50 p-3.5 hover:from-teal-100 hover:to-emerald-100 transition-all group"
+                  className="flex items-center gap-3 rounded-xl border border-teal-200/60 dark:border-teal-800/60 bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 p-3.5 hover:from-teal-100 hover:to-emerald-100 dark:hover:from-teal-950/50 dark:hover:to-emerald-950/50 transition-all group"
                 >
                   <div className="grid h-9 w-9 place-items-center rounded-lg bg-teal-600 text-white shadow-sm">
                     <Bot className="h-4.5 w-4.5" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900">New Support Request</p>
-                    <p className="text-[11px] text-slate-500">Describe your problem to AI</p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">New Support Request</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Describe your problem to AI</p>
                   </div>
                   <ArrowRight className="h-4 w-4 text-teal-400 ml-auto group-hover:translate-x-0.5 transition-transform" />
                 </Link>
                 <Link
                   to="/tickets"
-                  className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-slate-50/50 p-3.5 hover:bg-slate-100/60 transition-all group"
+                  className="flex items-center gap-3 rounded-xl border border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 p-3.5 hover:bg-slate-100/60 dark:hover:bg-slate-800/80 transition-all group"
                 >
-                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-200 text-slate-700">
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     <Ticket className="h-4.5 w-4.5" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900">View My Tickets</p>
-                    <p className="text-[11px] text-slate-500">Track escalated issues</p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">View My Tickets</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Track escalated issues</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="h-4 w-4 text-slate-300 dark:text-slate-600 ml-auto group-hover:translate-x-0.5 transition-transform" />
                 </Link>
                 <Link
                   to="/notifications"
-                  className="flex items-center gap-3 rounded-xl border border-slate-200/60 bg-slate-50/50 p-3.5 hover:bg-slate-100/60 transition-all group"
+                  className="flex items-center gap-3 rounded-xl border border-slate-200/60 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50 p-3.5 hover:bg-slate-100/60 dark:hover:bg-slate-800/80 transition-all group"
                 >
-                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-200 text-slate-700">
+                  <div className="grid h-9 w-9 place-items-center rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                     <LifeBuoy className="h-4.5 w-4.5" />
                   </div>
                   <div>
-                    <p className="text-xs font-bold text-slate-900">Notifications</p>
-                    <p className="text-[11px] text-slate-500">Updates & status changes</p>
+                    <p className="text-xs font-bold text-slate-900 dark:text-white">Notifications</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Updates & status changes</p>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-slate-300 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                  <ArrowRight className="h-4 w-4 text-slate-300 dark:text-slate-600 ml-auto group-hover:translate-x-0.5 transition-transform" />
                 </Link>
               </div>
             </div>
 
             {/* Recently Resolved */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
               <div className="flex items-center gap-2 mb-4">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                <h2 className="text-sm font-bold text-slate-900">Recently Resolved</h2>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <h2 className="text-sm font-bold text-slate-900 dark:text-white">Recently Resolved</h2>
               </div>
               {isLoading ? (
                 <div className="space-y-2">
                   {[1, 2].map((i) => (
-                    <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100" />
+                    <div key={i} className="h-12 animate-pulse rounded-lg bg-slate-100 dark:bg-slate-800" />
                   ))}
                 </div>
               ) : recentResolved.length === 0 ? (
@@ -387,15 +446,32 @@ export function UserDashboard() {
                   {recentResolved.map((session) => (
                     <div
                       key={session.id}
-                      className="flex items-start gap-2.5 rounded-lg bg-emerald-50/40 border border-emerald-100/60 p-3"
+                      className="flex items-center justify-between gap-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-100/80 dark:border-emerald-800/50 p-3 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 transition-colors"
                     >
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-800 truncate">{session.problemDescription}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {session.totalStepsAttempted} step{session.totalStepsAttempted !== 1 ? "s" : ""} · {formatTimeAgo(session.resolvedAt || session.updatedAt)}
-                        </p>
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 mt-0.5 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">{session.problemDescription}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                            {session.totalStepsAttempted} step{session.totalStepsAttempted !== 1 ? "s" : ""} · {formatTimeAgo(session.resolvedAt || session.updatedAt)}
+                          </p>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFeedbackSession(session);
+                          setFeedbackSuccess(false);
+                          setFeedbackComment("");
+                          setFeedbackRating(5);
+                          setFeedbackHelpful(true);
+                          setShowFeedbackModal(true);
+                        }}
+                        className="shrink-0 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 hover:bg-emerald-200 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <Star className="w-3 h-3 text-amber-500 fill-amber-400" />
+                        <span>Rate</span>
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -403,8 +479,8 @@ export function UserDashboard() {
             </div>
 
             {/* How It Works */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
-              <h2 className="text-sm font-bold text-slate-900 mb-4">How ResolveAI Works</h2>
+            <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-xs">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-white mb-4">How ResolveAI Works</h2>
               <div className="space-y-3">
                 {[
                   { step: "1", title: "Describe your problem", desc: "Tell the AI what's happening" },
@@ -427,6 +503,150 @@ export function UserDashboard() {
           </div>
         </section>
       </main>
+
+      {/* Resolution Feedback Modal */}
+      {showFeedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 sm:p-7 shadow-2xl relative text-slate-900">
+            <button
+              onClick={() => setShowFeedbackModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Resolution Feedback</h3>
+                <p className="text-xs text-slate-500">Help improve future RAG automated solutions</p>
+              </div>
+            </div>
+
+            {feedbackSession && (
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 mb-4">
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Issue Resolved</p>
+                <p className="text-xs font-semibold text-slate-800 mt-0.5">{feedbackSession.problemDescription}</p>
+              </div>
+            )}
+
+            {feedbackSuccess ? (
+              <div className="py-6 text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-600 mx-auto flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-slate-900">Thank you for your feedback!</h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Your rating and comments have been recorded to tune RAG retrieval relevance.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="mt-3 px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Was the automated solution helpful?
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackHelpful(true)}
+                      className={cn(
+                        "py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all",
+                        feedbackHelpful
+                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                      <span>Yes, Solved It</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFeedbackHelpful(false)}
+                      className={cn(
+                        "py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all",
+                        !feedbackHelpful
+                          ? "bg-rose-600 text-white border-rose-600 shadow-sm"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      )}
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                      <span>Partially / No</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Satisfaction Rating (1 to 5 stars)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setFeedbackRating(star)}
+                        className="p-1 hover:scale-110 transition-transform"
+                      >
+                        <Star
+                          className={cn(
+                            "w-6 h-6",
+                            star <= feedbackRating
+                              ? "text-amber-500 fill-amber-400"
+                              : "text-slate-300"
+                          )}
+                        />
+                      </button>
+                    ))}
+                    <span className="text-xs font-bold text-slate-600 ml-2">
+                      {feedbackRating} / 5 Stars
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    Comments or Suggestions (Optional)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={feedbackComment}
+                    onChange={(e) => setFeedbackComment(e.target.value)}
+                    placeholder="Tell us what worked well or what troubleshooting steps could be clearer..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowFeedbackModal(false)}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackSuccess(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20"
+                  >
+                    Submit Feedback
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }

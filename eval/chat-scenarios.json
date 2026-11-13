@@ -1,0 +1,670 @@
+[
+  {
+    "name": "network - happy",
+    "category": "network",
+    "turns": [
+      {
+        "user": "My network is broken on my MacBook Pro",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "network - confused",
+    "category": "network",
+    "turns": [
+      {
+        "user": "I have a network issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "network - fail_twice",
+    "category": "network",
+    "turns": [
+      {
+        "user": "network not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "network - fail_all",
+    "category": "network",
+    "turns": [
+      {
+        "user": "Fix my network",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "network - immediate_escalation",
+    "category": "network",
+    "turns": [
+      {
+        "user": "Critical production network is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "vpn - happy",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "My vpn is broken on my iPhone",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "vpn - confused",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "I have a vpn issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "vpn - fail_twice",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "vpn not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "vpn - fail_all",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "Fix my vpn",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "vpn - immediate_escalation",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "Critical production vpn is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "hardware - happy",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "My hardware is broken on my Android",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "hardware - confused",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "I have a hardware issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "hardware - fail_twice",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "hardware not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "hardware - fail_all",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "Fix my hardware",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "hardware - immediate_escalation",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "Critical production hardware is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "software - happy",
+    "category": "software",
+    "turns": [
+      {
+        "user": "My software is broken on my Windows 11",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "software - confused",
+    "category": "software",
+    "turns": [
+      {
+        "user": "I have a software issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "software - fail_twice",
+    "category": "software",
+    "turns": [
+      {
+        "user": "software not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "software - fail_all",
+    "category": "software",
+    "turns": [
+      {
+        "user": "Fix my software",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "software - immediate_escalation",
+    "category": "software",
+    "turns": [
+      {
+        "user": "Critical production software is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "account - happy",
+    "category": "account",
+    "turns": [
+      {
+        "user": "My account is broken on my MacBook Pro",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "account - confused",
+    "category": "account",
+    "turns": [
+      {
+        "user": "I have a account issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "account - fail_twice",
+    "category": "account",
+    "turns": [
+      {
+        "user": "account not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "account - fail_all",
+    "category": "account",
+    "turns": [
+      {
+        "user": "Fix my account",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "account - immediate_escalation",
+    "category": "account",
+    "turns": [
+      {
+        "user": "Critical production account is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "system - happy",
+    "category": "system",
+    "turns": [
+      {
+        "user": "My system is broken on my iPhone",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "system - confused",
+    "category": "system",
+    "turns": [
+      {
+        "user": "I have a system issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "system - fail_twice",
+    "category": "system",
+    "turns": [
+      {
+        "user": "system not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "system - fail_all",
+    "category": "system",
+    "turns": [
+      {
+        "user": "Fix my system",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "system - immediate_escalation",
+    "category": "system",
+    "turns": [
+      {
+        "user": "Critical production system is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "other - happy",
+    "category": "other",
+    "turns": [
+      {
+        "user": "My other is broken on my Android",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "other - confused",
+    "category": "other",
+    "turns": [
+      {
+        "user": "I have a other issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "I am confused",
+        "expectedSystemPattern": "Step 2:"
+      }
+    ]
+  },
+  {
+    "name": "other - fail_twice",
+    "category": "other",
+    "turns": [
+      {
+        "user": "other not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "other - fail_all",
+    "category": "other",
+    "turns": [
+      {
+        "user": "Fix my other",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 3:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 4:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 5:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "other - immediate_escalation",
+    "category": "other",
+    "turns": [
+      {
+        "user": "Critical production other is down! I need a technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "Explicit escalation",
+    "category": "general",
+    "turns": [
+      {
+        "user": "I need a human technician",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "Critical outage",
+    "category": "general",
+    "turns": [
+      {
+        "user": "The entire production server is down and we are losing data",
+        "expectedSystemPattern": "escalat|ticket"
+      }
+    ]
+  },
+  {
+    "name": "Printer happy path",
+    "category": "hardware",
+    "turns": [
+      {
+        "user": "Printer is not working",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "working now",
+        "expectedSystemPattern": "resolved|ticket"
+      }
+    ]
+  },
+  {
+    "name": "Wi-Fi toggle issue",
+    "category": "network",
+    "turns": [
+      {
+        "user": "My wifi is not connecting",
+        "expectedSystemPattern": "Step 1:.*toggle"
+      },
+      {
+        "user": "it worked",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  },
+  {
+    "name": "VPN connection issue",
+    "category": "vpn",
+    "turns": [
+      {
+        "user": "VPN issue",
+        "expectedSystemPattern": "Step 1:"
+      },
+      {
+        "user": "did not work",
+        "expectedSystemPattern": "Step 2:"
+      },
+      {
+        "user": "solved",
+        "expectedSystemPattern": "resolved"
+      }
+    ]
+  }
+]

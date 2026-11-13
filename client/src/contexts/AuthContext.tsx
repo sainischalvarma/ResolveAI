@@ -4,10 +4,19 @@ import {
   AuthUser,
   getMeApi,
   loginApi,
+  loginWithGoogleApi,
   registerApi,
   TOKEN_STORAGE_KEY,
   USER_STORAGE_KEY
 } from "../services/api";
+import { saveAccountToStorage } from "../utils/savedAccounts";
+
+export interface LoginResult {
+  user?: AuthUser;
+  requirePasskey?: boolean;
+  email?: string;
+  name?: string;
+}
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -17,7 +26,16 @@ interface AuthContextType {
   isStaff: boolean;
   isUser: boolean;
   isLoading: boolean;
-  login: (credentials: { email: string; password: string }) => Promise<AuthUser>;
+  login: (credentials: { email: string; password: string; passkey?: string }) => Promise<LoginResult>;
+  loginWithGoogle: (googleData: {
+    credential?: string;
+    googleId?: string;
+    email?: string;
+    name?: string;
+    profileImage?: string;
+    role?: string;
+    passkey?: string;
+  }) => Promise<AuthUser>;
   loginAs: (role: "ADMIN" | "STAFF" | "USER") => Promise<AuthUser>;
   register: (data: {
     name: string;
@@ -97,21 +115,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
+      const isMockToken = savedToken.startsWith("mock-") || savedToken.startsWith("switched-") || savedToken.startsWith("google-session-");
+
+      if (isMockToken) {
+        const savedUser = localStorage.getItem(USER_STORAGE_KEY);
+        if (savedUser) {
+          try {
+            const parsed = JSON.parse(savedUser);
+            setUser(parsed);
+            saveAccountToStorage(parsed);
+          } catch {
+            logout();
+          }
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      // Optimistically populate state from localStorage for fast initial render
+      const savedUser = localStorage.getItem(USER_STORAGE_KEY);
+      if (savedUser) {
+        try {
+          const parsed = JSON.parse(savedUser);
+          setUser(parsed);
+          saveAccountToStorage(parsed);
+        } catch {
+          // fall through to /auth/me
+        }
+      }
+
       try {
         const currentUser = await getMeApi();
         setUser(currentUser);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(currentUser));
+        saveAccountToStorage(currentUser);
       } catch (err) {
         console.warn("Session check failed or offline:", err);
-        // If local user exists, keep it for smooth offline/dev experience
-        const savedUser = localStorage.getItem(USER_STORAGE_KEY);
-        if (savedUser) {
-          try {
-            setUser(JSON.parse(savedUser));
-          } catch {
-            logout();
-          }
-        } else {
+        if (!savedUser) {
           logout();
         }
       } finally {
@@ -122,19 +162,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const saveSession = (session: AuthSession) => {
+  const saveSession = (session: AuthSession, passkey?: string) => {
     setUser(session.user);
     setToken(session.token);
     localStorage.setItem(TOKEN_STORAGE_KEY, session.token);
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(session.user));
+    saveAccountToStorage({ ...session.user, passkey });
   };
 
-  const login = async (credentials: { email: string; password: string }): Promise<AuthUser> => {
+  const login = async (credentials: {
+    email: string;
+    password: string;
+    passkey?: string;
+  }): Promise<LoginResult> => {
     setIsLoading(true);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
     try {
-      const session = await loginApi(credentials);
-      saveSession(session);
-      return session.user;
+      const result = await loginApi(credentials);
+      if ("requirePasskey" in result && result.requirePasskey) {
+        return {
+          requirePasskey: true,
+          email: result.email,
+          name: result.name
+        };
+      }
+      const session = result as AuthSession;
+      saveSession(session, credentials.passkey);
+      return { user: session.user };
     } catch (error: any) {
       // Check if trying demo credentials and backend threw error, fallback smoothly
       const normalizedEmail = credentials.email.trim().toLowerCase();
@@ -142,12 +197,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         normalizedEmail === DEMO_ACCOUNTS.ADMIN.email &&
         credentials.password === DEMO_ACCOUNTS.ADMIN.password
       ) {
+        if (!credentials.passkey) {
+          return {
+            requirePasskey: true,
+            email: DEMO_ACCOUNTS.ADMIN.email,
+            name: DEMO_ACCOUNTS.ADMIN.fallbackUser.name
+          };
+        }
+        if (!/^\d{6}$/.test(credentials.passkey.trim())) {
+          throw new Error("Invalid 6-digit security passkey. Access denied.");
+        }
         const fallbackSession: AuthSession = {
           user: DEMO_ACCOUNTS.ADMIN.fallbackUser as any,
           token: "mock-admin-token-" + Date.now()
         };
-        saveSession(fallbackSession);
-        return fallbackSession.user;
+        saveSession(fallbackSession, credentials.passkey);
+        return { user: fallbackSession.user };
       }
       if (
         normalizedEmail === DEMO_ACCOUNTS.STAFF.email &&
@@ -158,7 +223,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           token: "mock-staff-token-" + Date.now()
         };
         saveSession(fallbackSession);
-        return fallbackSession.user;
+        return { user: fallbackSession.user };
       }
       if (
         normalizedEmail === DEMO_ACCOUNTS.USER.email &&
@@ -169,9 +234,56 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           token: "mock-user-token-" + Date.now()
         };
         saveSession(fallbackSession);
-        return fallbackSession.user;
+        return { user: fallbackSession.user };
       }
       throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async (googleData: {
+    credential?: string;
+    googleId?: string;
+    email?: string;
+    name?: string;
+    profileImage?: string;
+    role?: string;
+    passkey?: string;
+  }): Promise<AuthUser> => {
+    setIsLoading(true);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(USER_STORAGE_KEY);
+    try {
+      const session = await loginWithGoogleApi(googleData);
+      saveSession(session, googleData.passkey);
+      return session.user;
+    } catch (error: any) {
+      // In offline / dev fallback, only require 6-digit passkey for ADMIN
+      const role = (googleData.role as any) || "USER";
+      if (role === "ADMIN") {
+        const pass = (googleData.passkey || "").trim();
+        if (!pass || !/^\d{6}$/.test(pass)) {
+          throw new Error("Please enter your 6-digit security passkey to access Administrator.");
+        }
+      }
+
+      const email = googleData.email || "google.user@resolveai.com";
+      const fallbackSession: AuthSession = {
+        user: {
+          id: googleData.googleId || "google-user-" + Date.now(),
+          name: googleData.name || email.split("@")[0] || "Google User",
+          email,
+          role,
+          googleId: googleData.googleId,
+          profileImage: googleData.profileImage,
+          active: true,
+          status: "ACTIVE"
+        },
+        token: "google-session-jwt-" + Date.now()
+      };
+      saveSession(fallbackSession, googleData.passkey);
+      return fallbackSession.user;
     } finally {
       setIsLoading(false);
     }
@@ -180,14 +292,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loginAs = async (role: "ADMIN" | "STAFF" | "USER"): Promise<AuthUser> => {
     const config = DEMO_ACCOUNTS[role];
     try {
-      return await login({ email: config.email, password: config.password });
+      const res = await login({
+        email: config.email,
+        password: config.password,
+        passkey: role === "ADMIN" ? "123456" : undefined
+      });
+      if (res.user) return res.user;
+      throw new Error("Login failed");
     } catch {
       // Fallback in case backend is offline
       const fallbackSession: AuthSession = {
         user: config.fallbackUser as any,
         token: `mock-${role.toLowerCase()}-token-${Date.now()}`
       };
-      saveSession(fallbackSession);
+      saveSession(fallbackSession, role === "ADMIN" ? "123456" : undefined);
       return fallbackSession.user;
     }
   };
@@ -241,6 +359,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isUser,
         isLoading,
         login,
+        loginWithGoogle,
         loginAs,
         register,
         logout,

@@ -57,6 +57,7 @@ import {
   markNotificationReadApi,
   markAllNotificationsReadApi,
   addTicketReplyApi,
+  contributeStaffKnowledgeApi,
   type StaffOverviewStats,
   type StaffTicketItem,
   type StaffTicketDetailsResponse,
@@ -111,6 +112,18 @@ export function TechnicianDashboard() {
 
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [reopenReason, setReopenReason] = useState("");
+
+  // Knowledge Contribution ("Save as Knowledge") state
+  const [showKnowledgeModal, setShowKnowledgeModal] = useState(false);
+  const [kbTitle, setKbTitle] = useState("");
+  const [kbProblem, setKbProblem] = useState("");
+  const [kbRootCause, setKbRootCause] = useState("");
+  const [kbSteps, setKbSteps] = useState("");
+  const [kbSolution, setKbSolution] = useState("");
+  const [kbCategory, setKbCategory] = useState("network");
+  const [kbTags, setKbTags] = useState("");
+  const [kbSubmitting, setKbSubmitting] = useState(false);
+  const [kbSuccessMessage, setKbSuccessMessage] = useState<string | null>(null);
 
   // Intelligent assignment recommendation state
   const [assignmentRec, setAssignmentRec] = useState<AssignmentRecommendationResponse | null>(null);
@@ -354,6 +367,24 @@ export function TechnicianDashboard() {
         kbRecommendation: resolveKbRec.trim() || undefined
       });
 
+      // If KB Recommendation is provided, automatically queue as knowledge contribution for admin approval
+      if (resolveKbRec.trim() && ticketDetails?.ticket) {
+        try {
+          await contributeStaffKnowledgeApi({
+            ticketId: selectedTicketId,
+            title: `Resolved: ${ticketDetails.ticket.title}`,
+            problem: ticketDetails.ticket.description,
+            rootCause: resolveRootCause.trim() || undefined,
+            troubleshootingSteps: actionsList,
+            solution: resolveSummary.trim(),
+            category: ticketDetails.ticket.category || "network",
+            tags: [ticketDetails.ticket.category, "technician_solution"].filter(Boolean) as string[]
+          });
+        } catch {
+          // non-blocking
+        }
+      }
+
       setShowResolveModal(false);
       setResolveSummary("");
       setResolveRootCause("");
@@ -366,6 +397,34 @@ export function TechnicianDashboard() {
       void openTicketDetails(selectedTicketId);
     } catch (err: any) {
       setActionError(err.response?.data?.error || err.message || "Failed to resolve ticket");
+    }
+  };
+
+  const handleContributeKnowledge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!kbProblem.trim() || !kbSolution.trim()) return;
+    setKbSubmitting(true);
+    setKbSuccessMessage(null);
+    try {
+      await contributeStaffKnowledgeApi({
+        ticketId: selectedTicketId || undefined,
+        title: kbTitle.trim() || `Resolved: ${kbProblem.trim().slice(0, 60)}`,
+        problem: kbProblem.trim(),
+        rootCause: kbRootCause.trim() || undefined,
+        troubleshootingSteps: kbSteps.trim(),
+        solution: kbSolution.trim(),
+        category: kbCategory || "network",
+        tags: kbTags.trim() || undefined
+      });
+      setKbSuccessMessage("Knowledge submitted successfully! Administrator will review and approve for RAG retrieval.");
+      setTimeout(() => {
+        setShowKnowledgeModal(false);
+        setKbSuccessMessage(null);
+      }, 2500);
+    } catch (err: any) {
+      setActionError(err.response?.data?.error || err.message || "Failed to submit knowledge");
+    } finally {
+      setKbSubmitting(false);
     }
   };
 
@@ -1485,12 +1544,38 @@ export function TechnicianDashboard() {
                       </button>
                     )}
 
+                    {/* Save as Knowledge Contribution Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setKbTitle(`Resolved: ${ticketDetails.ticket.title}`);
+                        setKbProblem(ticketDetails.ticket.description);
+                        setKbCategory(ticketDetails.ticket.category || "network");
+                        setKbRootCause(ticketDetails.ticket.resolution?.rootCause || "");
+                        setKbSteps(
+                          ticketDetails.technicianActions.map((a) => a.action).join("\n") ||
+                          ticketDetails.aiTroubleshootingHistory.successfulActions.join("\n") ||
+                          ""
+                        );
+                        setKbSolution(ticketDetails.ticket.resolution?.summary || "");
+                        setKbTags(ticketDetails.ticket.category || "troubleshooting");
+                        setShowKnowledgeModal(true);
+                      }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-600/25 transition-all",
+                        ticketDetails.ticket.status === "RESOLVED" || ticketDetails.ticket.status === "CLOSED" ? "ml-auto" : ""
+                      )}
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+                      Save as Knowledge
+                    </button>
+
                     {/* Reopen Ticket Button */}
                     {(ticketDetails.ticket.status === "RESOLVED" || ticketDetails.ticket.status === "CLOSED") && (
                       <button
                         type="button"
                         onClick={() => setShowReopenModal(true)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-all ml-auto"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs transition-all"
                       >
                         <RotateCcw className="h-3.5 w-3.5" />
                         Reopen Ticket
@@ -2055,6 +2140,178 @@ export function TechnicianDashboard() {
                 >
                   Submit Resolution
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL: SAVE AS KNOWLEDGE (STAFF CONTRIBUTION)                 */}
+      {/* ============================================================ */}
+      {showKnowledgeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-indigo-500/30 rounded-2xl w-full max-w-xl p-6 shadow-2xl relative text-white max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowKnowledgeModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 text-cyan-300 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Save as Knowledge Base Article</h3>
+                <p className="text-xs text-slate-400">
+                  Adaptive RAG learning: Newly solved solutions expand AI knowledge without model retraining
+                </p>
+              </div>
+            </div>
+
+            {kbSuccessMessage && (
+              <div className="my-3 p-3 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{kbSuccessMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleContributeKnowledge} className="mt-4 space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Knowledge Article Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={kbTitle}
+                    onChange={(e) => setKbTitle(e.target.value)}
+                    placeholder="e.g. Wi-Fi adapter restart & WLAN AutoConfig reset"
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Category *
+                  </label>
+                  <select
+                    value={kbCategory}
+                    onChange={(e) => setKbCategory(e.target.value)}
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="network">Network / Wi-Fi</option>
+                    <option value="vpn">VPN / Remote Access</option>
+                    <option value="hardware">Hardware / Printer</option>
+                    <option value="software">Software / Outlook</option>
+                    <option value="account">Account / Login / Password</option>
+                    <option value="system">System / Windows / Mac</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Problem Description *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={kbProblem}
+                  onChange={(e) => setKbProblem(e.target.value)}
+                  placeholder="Detailed description of the symptom or user issue..."
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Root Cause (Identified by Technician)
+                </label>
+                <input
+                  type="text"
+                  value={kbRootCause}
+                  onChange={(e) => setKbRootCause(e.target.value)}
+                  placeholder="e.g. Stale WLAN AutoConfig service state after sleep/resume"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Troubleshooting Steps Taken * (One per line)
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={kbSteps}
+                  onChange={(e) => setKbSteps(e.target.value)}
+                  placeholder="1. Verify adapter state in Device Manager&#10;2. Restart WLAN AutoConfig service in services.msc&#10;3. Reset network adapter via netsh int ip reset"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Final Verified Solution *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={kbSolution}
+                  onChange={(e) => setKbSolution(e.target.value)}
+                  placeholder="Exact steps to solve the issue that worked successfully..."
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Tags (Comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={kbTags}
+                  onChange={(e) => setKbTags(e.target.value)}
+                  placeholder="wifi, wlan, network, adapter, windows"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-white/10">
+                <span className="text-[11px] text-slate-400">
+                  Queues for Admin approval before embedding generation
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowKnowledgeModal(false)}
+                    className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={kbSubmitting}
+                    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-indigo-600/30 disabled:opacity-50"
+                  >
+                    {kbSubmitting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                        <span>Submit to Knowledge Base</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

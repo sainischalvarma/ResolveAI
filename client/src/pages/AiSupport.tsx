@@ -159,23 +159,6 @@ export function AiSupport() {
 
   const handleSendMessage = async (message: string) => {
     await sendMessage(message);
-
-    // After sending a message, if it's a problem description and no active session,
-    // auto-start troubleshooting
-    if (!activeSession && message.length > 10) {
-      // Detect category from message
-      const lower = message.toLowerCase();
-      let category = "other";
-      if (lower.includes("wi-fi") || lower.includes("wifi") || lower.includes("internet")) category = "wi-fi";
-      else if (lower.includes("network") || lower.includes("ethernet")) category = "network";
-      else if (lower.includes("vpn")) category = "vpn";
-      else if (lower.includes("software") || lower.includes("app") || lower.includes("install")) category = "software";
-      else if (lower.includes("hardware") || lower.includes("laptop") || lower.includes("monitor")) category = "hardware";
-      else if (lower.includes("login") || lower.includes("password") || lower.includes("account")) category = "account";
-      else if (lower.includes("email") || lower.includes("outlook") || lower.includes("inbox")) category = "email";
-
-      await handleStartTroubleshooting(message, category);
-    }
   };
 
   /* ------------------------------------------------------------------ */
@@ -410,6 +393,59 @@ export function AiSupport() {
                   userName={user?.name || "You"}
                   onSendSuggestion={handleSendMessage}
                 />
+              )}
+
+              {/* Dynamic State Badges: Escalated / Resolved / Troubleshooting Context */}
+              {activeConversation?.state?.ticketId && (
+                <div className="mx-4 mb-2 p-3 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-900 flex items-center justify-between shadow-xs animate-in fade-in">
+                  <div className="flex items-center gap-2.5">
+                    <Ticket className="w-5 h-5 text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold">Support Ticket Escalated (#{String(activeConversation.state.ticketId).slice(0, 8)})</p>
+                      <p className="text-[11px] text-amber-700">An official support ticket has been opened with full diagnostic history for our IT support staff.</p>
+                    </div>
+                  </div>
+                  <Link
+                    to={`/tickets/${activeConversation.state.ticketId}`}
+                    className="text-xs font-semibold px-3 py-1.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors shrink-0"
+                  >
+                    View Ticket
+                  </Link>
+                </div>
+              )}
+
+              {activeConversation?.state?.solved && (
+                <div className="mx-4 mb-2 p-3 rounded-2xl bg-emerald-50/90 border border-emerald-200 text-emerald-900 flex items-center gap-2.5 shadow-xs animate-in fade-in">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold">Problem Successfully Resolved</p>
+                    <p className="text-[11px] text-emerald-700">The verified solution outcome has been recorded in ResolveAI's outcome memory.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Natural Quick Reply Chips */}
+              {activeConversation && activeConversation.messages.length > 0 && !activeConversation.state?.solved && !activeConversation.state?.ticketId && (
+                <div className="px-4 pb-2 flex items-center gap-1.5 overflow-x-auto">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 shrink-0 mr-1">Quick reply:</span>
+                  {[
+                    "Yes, that worked!",
+                    "That didn't work",
+                    "I already tried that",
+                    "My phone works on this Wi-Fi",
+                    "I need a human technician"
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      disabled={isSending}
+                      onClick={() => handleSendMessage(chip)}
+                      className="px-2.5 py-1 text-xs font-medium rounded-lg bg-white hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 border border-slate-200 text-slate-700 shadow-2xs transition-all shrink-0"
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
               )}
 
               {/* Chat Input Bar */}

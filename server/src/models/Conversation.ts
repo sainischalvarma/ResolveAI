@@ -3,9 +3,10 @@ import mongoose, { Schema, type InferSchemaType } from "mongoose";
 const conversationSchema = new Schema(
   {
     userId: { type: String, required: true, index: true },
-    title: { type: String, required: true, trim: true, maxlength: 120 }
+    title: { type: String, required: true, trim: true, maxlength: 120 },
+    state: { type: Schema.Types.Mixed, default: {} }
   },
-  { timestamps: true }
+  { timestamps: true, minimize: false }
 );
 
 conversationSchema.index({ userId: 1, updatedAt: -1 });
